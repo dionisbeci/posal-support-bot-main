@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test Chat Widget</title>
+  <script src="/embed.js"></script>
+</head>
+<body>
+  <h1>Test Chat Widget</h1>
+  <p>Click the button to open the chat.</p>
+  <button onclick="window.ChatWidget.open()">Open Chat</button>
+
+  <script>
+    window.addEventListener('load', function() {
+      window.ChatWidget.init({
+        chatId: 'test-chat-session',
+      });
+    });
+  </script>
+</body>
+</html>

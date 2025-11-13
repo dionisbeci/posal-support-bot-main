@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test ChatKit</title>
+  <script
+    src="https://cdn.platform.openai.com/deployments/chatkit/chatkit.js"
+    async
+  ></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      margin: 0;
+      background: #f5f5f5;
+    }
+    #chatkit-container {
+      width: 400px;
+      height: 600px;
+      border-radius: 8px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+  </style>
+</head>
+<body>
+  <div id="chatkit-container"></div>
+
+  <script>
+    window.addEventListener('load', async function() {
+      // Wait for ChatKit to load
+      if (typeof window.ChatKit === 'undefined') {
+        await new Promise(resolve => {
+          const checkInterval = setInterval(() => {
+            if (typeof window.ChatKit !== 'undefined') {
+              clearInterval(checkInterval);
+              resolve();
+            }
+          }, 100);
+        });
+      }
+
+      const chatkit = window.ChatKit.mount('#chatkit-container');
+
+      chatkit.setOptions({
+        api: {
+          async getClientSecret(currentClientSecret) {
+            if (currentClientSecret) {
+              // Refresh existing session
+              const res = await fetch('/api/chatkit/session', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  currentClientSecret: currentClientSecret,
+                }),
+              });
+              
+              if (!res.ok) {
+                throw new Error('Failed to refresh session');
+              }
+              
+              const { client_secret } = await res.json();
+              return client_secret;
+            }
+
+            // Create new session
+            const res = await fetch('/api/chatkit/session', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                deviceId: `device_${Date.now()}`,
+              }),
+            });
+
+            if (!res.ok) {
+              const error = await res.json();
+              throw new Error(error.error || 'Failed to create session');
+            }
+
+            const { client_secret } = await res.json();
+            return client_secret;
+          }
+        },
+      });
+    });
+  </script>
+</body>
+</html>
+
