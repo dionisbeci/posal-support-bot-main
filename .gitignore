@@ -31,3 +31,7 @@
 
 # Secure files
 /.secure
+
+
+# Firebase Config
+src/lib/firebase.ts
