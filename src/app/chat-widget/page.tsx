@@ -26,92 +26,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { OpenAI } from 'openai';
 import ReactMarkdown from 'react-markdown';
 
-interface MessageInputFormProps {
-  conversationId: string | null;
-  currentThreadId: string | null;
-  onNewThreadId: (newId: string) => void;
-
-  isSending: boolean;
-  setIsSending: (isSending: boolean) => void;
-}
-
-
-function MessageInputForm({ conversationId, currentThreadId, onNewThreadId, isSending, setIsSending }: MessageInputFormProps) {
-  const [input, setInput] = useState('');
- 
-
-  const handleSendMessage = async (e: FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || !conversationId || isSending) return;
-
-    const userInput = input;
-    setInput('');
-    setIsSending(true);
-
-    await addDoc(collection(db, 'messages'), {
-      role: 'user',
-      content: userInput,
-      conversationId,
-      timestamp: serverTimestamp()
-    });
-
-    try {
-      const res = await fetch('/api/ai/respond', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: userInput,
-          threadId: currentThreadId
-        }),
-      });
-
-      if (!res.ok) throw new Error('Failed to get AI response');
-
-      const data = await res.json();
-
-      if (data.threadId) {
-        onNewThreadId(data.threadId);
-      }
-
-      await addDoc(collection(db, 'messages'), {
-        role: 'ai',
-        content: data.response,
-        conversationId,
-        timestamp: serverTimestamp()
-      });
-
-      await updateDoc(doc(db, 'conversations', conversationId), {
-        lastMessage: data.response,
-        lastMessageAt: serverTimestamp()
-      });
-
-    } catch (error) {
-      console.error('Error sending message:', error);
-    } finally {
-      setIsSending(false);
-    }
-  };
-
-  return (
-    <div className="border-t bg-background p-4">
-      <form onSubmit={handleSendMessage} className="relative">
-        <Textarea
-          placeholder="Type your message..."
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
-          className="pr-12"
-          disabled={isSending}
-        />
-        <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
-          <Send className="h-5 w-5 text-primary" />
-        </Button>
-      </form>
-    </div>
-  );
-}
-
-
 const ChatWidget = memo(function ChatWidget() {
   console.log("ChatWidget component is rendering/mounting");
 
@@ -129,7 +43,9 @@ const ChatWidget = memo(function ChatWidget() {
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
   const [isSending, setIsSending] = useState(false);
-  
+  const [input, setInput] = useState('');
+  const [conversationStatus, setConversationStatus] = useState<string>('ai');
+
   useEffect(() => {
     const initialize = async () => {
       if (!chatId || !origin) return;
@@ -159,6 +75,15 @@ const ChatWidget = memo(function ChatWidget() {
   useEffect(() => {
     if (!conversationId) return;
 
+    // Listen to conversation status
+    const convoRef = doc(db, 'conversations', conversationId);
+    const unsubscribeConvo = onSnapshot(convoRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setConversationStatus(data.status);
+      }
+    });
+
     const q = query(
       collection(db, 'messages'),
       where('conversationId', '==', conversationId),
@@ -166,7 +91,7 @@ const ChatWidget = memo(function ChatWidget() {
       limit(30)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeMessages = onSnapshot(q, (snapshot) => {
       console.log(`onSnapshot callback fired. Documents received: ${snapshot.size}`);
       const msgs = snapshot.docs.map((doc) => {
         const data = doc.data() as Message;
@@ -175,13 +100,75 @@ const ChatWidget = memo(function ChatWidget() {
       });
       setMessages(msgs.reverse());
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribeConvo();
+      unsubscribeMessages();
+    };
   }, [conversationId]);
-  
+
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, isSending]);
+
+  const handleSendMessage = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!input.trim() || !conversationId || isSending) return;
+
+    const userInput = input;
+    setInput('');
+    setIsSending(true);
+
+    await addDoc(collection(db, 'messages'), {
+      role: 'user',
+      content: userInput,
+      conversationId,
+      timestamp: serverTimestamp()
+    });
+
+    // If status is active (human agent joined), DO NOT call AI
+    if (conversationStatus === 'active') {
+      setIsSending(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/ai/respond', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: userInput,
+          threadId: threadId,
+          conversationId // Pass conversationId for handoff logic
+        }),
+      });
+
+      if (!res.ok) throw new Error('Failed to get AI response');
+
+      const data = await res.json();
+
+      if (data.threadId) {
+        setThreadId(data.threadId);
+      }
+
+      await addDoc(collection(db, 'messages'), {
+        role: 'ai',
+        content: data.response,
+        conversationId,
+        timestamp: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'conversations', conversationId), {
+        lastMessage: data.response,
+        lastMessageAt: serverTimestamp()
+      });
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   if (error) return <div className="flex h-full items-center justify-center p-4 text-center text-red-700">{error}</div>;
@@ -204,14 +191,14 @@ const ChatWidget = memo(function ChatWidget() {
                   {message.role === 'user' ? <User className="h-5 w-5" /> : <Bot className="h-5 w-5" />}
                 </AvatarFallback>
               </Avatar>
-                <div className={cn('max-w-[75%] rounded-lg p-3 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card text-card-foreground border rounded-bl-none', 'prose prose-sm max-w-none')}>
-                    <ReactMarkdown>
-                      {message.content}
-                     </ReactMarkdown>
-                  </div>
+              <div className={cn('max-w-[75%] rounded-lg p-3 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card text-card-foreground border rounded-bl-none', 'prose prose-sm max-w-none')}>
+                <ReactMarkdown>
+                  {message.content}
+                </ReactMarkdown>
+              </div>
             </div>
           ))}
-        
+
           {isSending && (
             <div className="flex items-end gap-3">
               <Avatar className="h-8 w-8">
@@ -226,17 +213,25 @@ const ChatWidget = memo(function ChatWidget() {
           )}
         </div>
       </ScrollArea>
-      <MessageInputForm 
-        conversationId={conversationId} 
-        currentThreadId={threadId}
-        onNewThreadId={setThreadId}
-        isSending={isSending}
-        setIsSending={setIsSending}
-      />
+      <div className="border-t bg-background p-4">
+        <form onSubmit={handleSendMessage} className="relative">
+          <Textarea
+            placeholder="Type your message..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+            className="pr-12"
+            disabled={isSending}
+          />
+          <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
+            <Send className="h-5 w-5 text-primary" />
+          </Button>
+        </form>
+      </div>
     </div>
   );
 });
 
 export default function ChatWidgetPage() {
-    return (<Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}><ChatWidget /></Suspense>);
+  return (<Suspense fallback={<div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>}><ChatWidget /></Suspense>);
 }

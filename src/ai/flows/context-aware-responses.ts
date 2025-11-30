@@ -41,7 +41,9 @@ async function useAssistantAPI(
 
     await openai.beta.threads.messages.create(currentThreadId, {
       role: 'user',
-      content: input.message,
+      content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian. If you are unsure of the answer or if the user asks for a human, reply EXACTLY with: "Nuk jam i sigurt për këtë, më lejoni t'ju lidh me një agjent njerëzor" and nothing else.
+      
+      User Message: ${input.message}`,
     });
 
     let run: Run = await openai.beta.threads.runs.create(currentThreadId, {
@@ -49,21 +51,21 @@ async function useAssistantAPI(
     });
     console.log('Created run:', run.id);
 
-  while (run.status === 'queued' || run.status === 'in_progress') {
-    await new Promise(resolve => setTimeout(resolve, 500));
+    while (run.status === 'queued' || run.status === 'in_progress') {
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-    run = await openai.beta.threads.runs.retrieve(
-      run.id,
-      { thread_id: currentThreadId }
-    );
-  }
+      run = await openai.beta.threads.runs.retrieve(
+        run.id,
+        { thread_id: currentThreadId }
+      );
+    }
 
 
 
     if (run.status === 'completed') {
-      const messages = await openai.beta.threads.messages.list(currentThreadId);
+      const messages = await openai.beta.threads.messages.list(currentThreadId, { limit: 1 });
       const assistantMessage = messages.data.find(msg => msg.role === 'assistant');
-      
+
       if (assistantMessage && assistantMessage.content[0].type === 'text') {
         const response = assistantMessage.content[0].text.value;
         return { response, threadId: currentThreadId };
@@ -90,9 +92,9 @@ async function useChatCompletions(
     const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
     if (input.conversationHistory && input.conversationHistory.length > 0) {
       for (const msg of input.conversationHistory) {
-        messages.push({ 
-          role: msg.role === 'ai' ? 'assistant' : 'user', 
-          content: msg.content 
+        messages.push({
+          role: msg.role === 'ai' ? 'assistant' : 'user',
+          content: msg.content
         });
       }
     }
@@ -125,7 +127,7 @@ export async function getContextAwareResponse(
   const assistantId = process.env.OPENAI_ASSISTANT_ID;
   const apiKey = process.env.OPENAI_API_KEY;
   const useAssistant = !!(assistantId);
-  
+
   console.log('Environment check:', {
     hasAssistantId: !!assistantId,
     assistantIdPrefix: assistantId ? assistantId.substring(0, 15) + '...' : 'missing',
@@ -133,22 +135,21 @@ export async function getContextAwareResponse(
     apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'missing',
     useAssistant: useAssistant
   });
-  
+
   if (!apiKey) {
     return { response: 'Sorry, the OpenAI API key is not configured.' };
   }
-  
+
   try {
     if (useAssistant) {
       return await useAssistantAPI(assistantId!, validatedInput);
     }
     const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
     return await useChatCompletions(model, validatedInput);
-  } catch (err: any)
-  {
+  } catch (err: any) {
     console.error('Error in getContextAwareResponse:', err);
     let errorMessage = 'Sorry, something went wrong while generating a response.';
-    if(err.message) {
+    if (err.message) {
       errorMessage = err.message;
     }
     return { response: errorMessage };

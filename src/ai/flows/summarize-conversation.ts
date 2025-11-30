@@ -2,14 +2,10 @@
 
 /**
  * @fileOverview Summarizes the conversation history for an agent taking over a chat.
- *
- * - summarizeConversation - A function that summarizes the conversation history.
- * - SummarizeConversationInput - The input type for the summarizeConversation function.
- * - SummarizeConversationOutput - The return type for the summarizeConversation function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { openai } from '@/ai/genkit';
+import { z } from 'zod';
 
 const SummarizeConversationInputSchema = z.object({
   conversationHistory: z
@@ -34,29 +30,26 @@ export type SummarizeConversationOutput = z.infer<
 export async function summarizeConversation(
   input: SummarizeConversationInput
 ): Promise<SummarizeConversationOutput> {
-  return summarizeConversationFlow(input);
-}
+  try {
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an AI assistant helping human agents understand past conversations with users quickly.
+          Summarize the following conversation history, focusing on the user's problem, needs, and any solutions that have already been attempted.`
+        },
+        {
+          role: 'user',
+          content: `Conversation History:\n${input.conversationHistory}`
+        }
+      ]
+    });
 
-const prompt = ai.definePrompt({
-  name: 'summarizeConversationPrompt',
-  input: {schema: SummarizeConversationInputSchema},
-  output: {schema: SummarizeConversationOutputSchema},
-  prompt: `You are an AI assistant helping human agents understand past conversations with users quickly.
-
-  Summarize the following conversation history, focusing on the user's problem, needs, and any solutions that have already been attempted:
-
-  Conversation History:
-  {{conversationHistory}}`,
-});
-
-const summarizeConversationFlow = ai.defineFlow(
-  {
-    name: 'summarizeConversationFlow',
-    inputSchema: SummarizeConversationInputSchema,
-    outputSchema: SummarizeConversationOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+    const summary = completion.choices[0]?.message?.content || 'Could not generate summary.';
+    return { summary };
+  } catch (error) {
+    console.error('Error generating summary:', error);
+    throw new Error('Failed to generate summary');
   }
-);
+}

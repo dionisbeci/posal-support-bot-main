@@ -51,15 +51,15 @@ export default function ConversationDetailPage() {
   const params = useParams();
   const id = params.id as string;
   const { toast } = useToast();
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
-  const [conversation, setConversation] = useState<(Conversation & {agentDetails?: Agent}) | null>(null);
+  const [conversation, setConversation] = useState<(Conversation & { agentDetails?: Agent }) | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [input, setInput] = useState('');
   const [summary, setSummary] = useState<SummarizeConversationOutput | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
-  
+
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
@@ -74,7 +74,7 @@ export default function ConversationDetailPage() {
       if (docSnap.exists()) {
         const convoData = docSnap.data() as Conversation;
         convoData.id = docSnap.id;
-        
+
         if (convoData.lastMessageAt instanceof Timestamp) {
           convoData.lastMessageAt = convoData.lastMessageAt.toDate();
         }
@@ -86,10 +86,10 @@ export default function ConversationDetailPage() {
             agentDetails = agentSnap.data() as Agent;
           }
         } else if (convoData.agent) {
-           agentDetails = convoData.agent as Agent;
+          agentDetails = convoData.agent as Agent;
         }
 
-        setConversation({...convoData, agentDetails});
+        setConversation({ ...convoData, agentDetails });
       } else {
         setConversation(null);
       }
@@ -98,11 +98,11 @@ export default function ConversationDetailPage() {
     const q = query(collection(db, 'messages'), where('conversationId', '==', id), orderBy('timestamp', 'asc'));
     const unsubscribeMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => {
-          const data = doc.data() as Message;
-          if (data.timestamp instanceof Timestamp) {
-             data.timestamp = data.timestamp.toDate();
-          }
-          return { ...data, id: doc.id }
+        const data = doc.data() as Message;
+        if (data.timestamp instanceof Timestamp) {
+          data.timestamp = data.timestamp.toDate();
+        }
+        return { ...data, id: doc.id }
       });
       setMessages(msgs);
       setLoading(false);
@@ -117,7 +117,7 @@ export default function ConversationDetailPage() {
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim() || !id) return;
-    
+
     const currentUser = placeholderAgents[0]; // Mock current agent
 
     const newMessage: Omit<Message, 'id' | 'timestamp'> = {
@@ -138,20 +138,20 @@ export default function ConversationDetailPage() {
         ...newMessage,
         timestamp: serverTimestamp(),
       });
-      
+
       const convoRef = doc(db, 'conversations', id);
       await updateDoc(convoRef, {
         lastMessage: input,
         lastMessageAt: serverTimestamp(),
       });
 
-    } catch(error) {
-       console.error("Error sending message:", error);
-       toast({
-         title: "Error",
-         description: "Could not send message.",
-         variant: "destructive"
-       });
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast({
+        title: "Error",
+        description: "Could not send message.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -177,6 +177,35 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const handleJoinConversation = async () => {
+    if (!conversation) return;
+
+    try {
+      const currentUser = placeholderAgents[0]; // Mock current agent
+      const convoRef = doc(db, 'conversations', conversation.id);
+
+      await updateDoc(convoRef, {
+        status: 'active',
+        agent: {
+          id: 'mock-agent-id', // In a real app this would be auth.currentUser.uid
+          name: currentUser.name,
+          email: currentUser.email,
+          role: currentUser.role,
+          avatar: currentUser.avatar
+        }
+      });
+
+      toast({ title: 'You have joined the conversation' });
+    } catch (error) {
+      console.error("Error joining conversation:", error);
+      toast({
+        title: "Error",
+        description: "Could not join conversation.",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return <div className="flex h-full items-center justify-center">Loading conversation...</div>;
   }
@@ -188,8 +217,8 @@ export default function ConversationDetailPage() {
       </div>
     );
   }
-  
-  const visitorName = `Visitor ${conversation.visitorId.substring(0,6)}`;
+
+  const visitorName = `Visitor ${conversation.visitorId.substring(0, 6)}`;
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] h-full">
@@ -230,7 +259,7 @@ export default function ConversationDetailPage() {
                       <>
                         <AvatarImage src={message.agent?.avatar} />
                         <AvatarFallback>
-                           {conversation.visitorId.substring(0, 2).toUpperCase()}
+                          {conversation.visitorId.substring(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </>
                     )}
@@ -355,9 +384,13 @@ export default function ConversationDetailPage() {
 
         </ScrollArea>
         <div className="p-4 border-t">
-          <Button className="w-full" disabled={conversation.status !== 'pending'}>
+          <Button
+            className="w-full"
+            onClick={handleJoinConversation}
+            disabled={conversation.status === 'active' || conversation.status === 'archived'}
+          >
             <UserCheck className="mr-2 h-4 w-4" />
-            Join Conversation
+            {conversation.status === 'active' ? 'Joined' : 'Join Conversation'}
           </Button>
         </div>
       </aside>

@@ -5,6 +5,7 @@ import {
   MessageSquare,
   Clock,
   Bot,
+  Loader2
 } from 'lucide-react';
 import {
   ChartContainer,
@@ -24,7 +25,10 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
-import { placeholderChartData } from '@/lib/placeholder-data';
+import { useEffect, useState } from 'react';
+import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { subDays, format, isSameDay, startOfDay } from 'date-fns';
 
 const chartConfig = {
   total: {
@@ -42,32 +46,127 @@ const chartConfig = {
 };
 
 export default function OverviewPage() {
-  const stats = [
+  const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState([
     {
-      title: 'Total Conversations',
-      value: '1,254',
-      change: '+12.5%',
+      title: 'Total Conversations (7d)',
+      value: '0',
+      change: '',
       icon: MessageSquare,
     },
     {
       title: 'Avg. Response Time',
-      value: '3m 45s',
-      change: '-2.1%',
+      value: 'N/A', // Hard to calc without more data
+      change: '',
       icon: Clock,
     },
     {
       title: 'AI Handoff Rate',
-      value: '23%',
-      change: '+1.5%',
+      value: '0%',
+      change: '',
       icon: Bot,
     },
     {
       title: 'Active Agents',
-      value: '8',
+      value: '0',
       change: '',
       icon: Users,
     },
-  ];
+  ]);
+  const [chartData, setChartData] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const sevenDaysAgo = subDays(new Date(), 7);
+        const q = query(
+          collection(db, 'conversations'),
+          where('lastMessageAt', '>=', sevenDaysAgo),
+          orderBy('lastMessageAt', 'asc')
+        );
+
+        const snapshot = await getDocs(q);
+        const docs = snapshot.docs.map(d => d.data());
+
+        // 1. Total Conversations
+        const total = docs.length;
+
+        // 2. AI Handoff Rate (Pending + Active / Total)
+        // Assuming 'ai' status means purely AI, others mean human involved/needed
+        const humanInvolved = docs.filter(d => d.status === 'active' || d.status === 'pending').length;
+        const handoffRate = total > 0 ? Math.round((humanInvolved / total) * 100) : 0;
+
+        // 3. Active Agents
+        const agents = new Set(docs.map(d => d.agent?.id).filter(Boolean));
+        const activeAgents = agents.size;
+
+        setStats([
+          {
+            title: 'Total Conversations (7d)',
+            value: total.toString(),
+            change: '', // We'd need previous period data for this
+            icon: MessageSquare,
+          },
+          {
+            title: 'Avg. Response Time',
+            value: 'N/A',
+            change: '',
+            icon: Clock,
+          },
+          {
+            title: 'AI Handoff Rate',
+            value: `${handoffRate}%`,
+            change: '',
+            icon: Bot,
+          },
+          {
+            title: 'Active Agents',
+            value: activeAgents.toString(),
+            change: '',
+            icon: Users,
+          },
+        ]);
+
+        // 4. Chart Data
+        // Group by day
+        const days = [];
+        for (let i = 0; i < 7; i++) {
+          days.push(subDays(new Date(), i));
+        }
+        days.reverse();
+
+        const data = days.map(day => {
+          const dayDocs = docs.filter(d => {
+            const date = d.lastMessageAt instanceof Timestamp ? d.lastMessageAt.toDate() : new Date(d.lastMessageAt);
+            return isSameDay(date, day);
+          });
+
+          const aiCount = dayDocs.filter(d => d.status === 'ai').length;
+          const humanCount = dayDocs.filter(d => d.status === 'active' || d.status === 'pending').length;
+
+          return {
+            date: format(day, 'EEE'), // Mon, Tue...
+            total: dayDocs.length,
+            ai: aiCount,
+            human: humanCount
+          };
+        });
+
+        setChartData(data);
+
+      } catch (error) {
+        console.error("Error fetching overview stats:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, []);
+
+  if (loading) {
+    return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+  }
 
   return (
     <div className="space-y-6">
@@ -82,11 +181,10 @@ export default function OverviewPage() {
               <div className="text-2xl font-bold">{stat.value}</div>
               {stat.change && (
                 <p
-                  className={`text-xs text-muted-foreground ${
-                    stat.change.startsWith('+')
+                  className={`text-xs text-muted-foreground ${stat.change.startsWith('+')
                       ? 'text-green-600'
                       : 'text-red-600'
-                  }`}
+                    }`}
                 >
                   {stat.change} from last week
                 </p>
@@ -98,13 +196,13 @@ export default function OverviewPage() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Conversation Volume</CardTitle>
+            <CardTitle>Conversation Volume (Last 7 Days)</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfig} className="h-[250px] w-full">
               <AreaChart
                 accessibilityLayer
-                data={placeholderChartData}
+                data={chartData}
                 margin={{
                   left: 12,
                   right: 12,
@@ -116,7 +214,6 @@ export default function OverviewPage() {
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={(value) => value.slice(0, 3)}
                 />
                 <YAxis
                   tickLine={false}
@@ -152,18 +249,17 @@ export default function OverviewPage() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Resolution Type</CardTitle>
+            <CardTitle>Resolution Type (Last 7 Days)</CardTitle>
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfig} className="h-[250px] w-full">
-              <BarChart accessibilityLayer data={placeholderChartData}>
+              <BarChart accessibilityLayer data={chartData}>
                 <CartesianGrid vertical={false} />
                 <XAxis
                   dataKey="date"
                   tickLine={false}
                   axisLine={false}
                   tickMargin={8}
-                  tickFormatter={(value) => value.slice(0, 3)}
                 />
                 <YAxis
                   tickLine={false}
