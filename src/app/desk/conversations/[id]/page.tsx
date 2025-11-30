@@ -26,6 +26,13 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from '@/components/ui/textarea';
 import {
   Paperclip,
@@ -155,6 +162,8 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const [summaryLanguage, setSummaryLanguage] = useState<'en' | 'sq'>('en');
+
   const handleSummarize = async () => {
     setIsSummarizing(true);
     setSummary(null);
@@ -162,7 +171,7 @@ export default function ConversationDetailPage() {
       const conversationHistory = messages
         .map((m) => `${m.role}: ${m.content}`)
         .join('\n');
-      const result = await summarizeConversation({ conversationHistory });
+      const result = await summarizeConversation({ conversationHistory, language: summaryLanguage });
       setSummary(result);
       toast({ title: 'Summary Generated' });
     } catch (error) {
@@ -352,32 +361,53 @@ export default function ConversationDetailPage() {
           </Card>
 
           <Card className="rounded-none border-0 border-b">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                AI Summary
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleSummarize}
-                  disabled={isSummarizing}
-                >
-                  {isSummarizing ? (
-                    <Loader className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Sparkles className="mr-2 h-4 w-4" />
-                  )}
-                  Generate
-                </Button>
-              </CardTitle>
+            <CardHeader className="pb-4">
+              <div className="flex flex-row items-center justify-between gap-4">
+                <CardTitle className="text-lg font-bold leading-none tracking-tight">AI Summary</CardTitle>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={summaryLanguage}
+                    onValueChange={(value: 'en' | 'sq') => setSummaryLanguage(value)}
+                    disabled={isSummarizing}
+                  >
+                    <SelectTrigger className="h-8 w-[100px] text-xs">
+                      <SelectValue placeholder="Language" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="sq">Albanian</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={handleSummarize}
+                    disabled={isSummarizing}
+                  >
+                    {isSummarizing ? (
+                      <Loader className="mr-2 h-3 w-3 animate-spin" />
+                    ) : (
+                      <Sparkles className="mr-2 h-3 w-3" />
+                    )}
+                    Generate
+                  </Button>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground space-y-2">
+            <CardContent className="text-sm text-muted-foreground pt-0">
               {isSummarizing && (
-                <p>Generating summary, please wait...</p>
+                <div className="flex items-center gap-2 py-4 text-xs">
+                  <Loader className="h-3 w-3 animate-spin" />
+                  <span>Generating summary in {summaryLanguage === 'sq' ? 'Albanian' : 'English'}...</span>
+                </div>
               )}
               {summary ? (
-                <p>{summary.summary}</p>
+                <div className="rounded-md bg-muted/50 p-3 text-sm leading-relaxed text-foreground">
+                  {summary.summary}
+                </div>
               ) : (
-                !isSummarizing && <p>Click "Generate" to get an AI summary of this conversation.</p>
+                !isSummarizing && <p className="text-xs text-muted-foreground">Select a language and click "Generate" to get an AI summary.</p>
               )}
             </CardContent>
           </Card>
