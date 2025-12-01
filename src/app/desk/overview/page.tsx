@@ -90,19 +90,19 @@ export default function OverviewPage() {
         const total = countSnapshot.data().count;
 
         // 2. Detailed Stats (Limited Fetch)
-        // We limit this to 1000 to prevent massive read spikes on the dashboard
+        // We limit this to 500 to prevent massive read spikes on the dashboard
         const q = query(
           collection(db, 'conversations'),
           where('lastMessageAt', '>=', sevenDaysAgo),
           orderBy('lastMessageAt', 'asc'),
-          limit(1000)
+          limit(500)
         );
 
         const snapshot = await getDocs(q);
         const docs = snapshot.docs.map(d => d.data());
 
         // 3. AI Handoff Rate (Pending + Active / Total from sample)
-        // We calculate rates based on the fetched sample (up to 1000)
+        // We calculate rates based on the fetched sample (up to 500)
         const sampleTotal = docs.length;
         const humanInvolved = docs.filter(d => d.status === 'active' || d.status === 'pending').length;
         const handoffRate = sampleTotal > 0 ? Math.round((humanInvolved / sampleTotal) * 100) : 0;

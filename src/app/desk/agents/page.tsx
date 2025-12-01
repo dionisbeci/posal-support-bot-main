@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { Agent } from '@/lib/types';
 import { AddAgentDialog } from './add-agent-dialog';
@@ -37,7 +37,7 @@ export default function AgentsPage() {
 
   useEffect(() => {
     console.log('Connecting to Firestore agents collection...');
-    const q = query(collection(db, 'agents'));
+    const q = query(collection(db, 'agents'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       console.log('Got Firestore update:', snapshot.docs.length, 'agents');
       const agentData = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id } as Agent));
@@ -60,11 +60,11 @@ export default function AgentsPage() {
             Manage your team members and their roles.
           </CardDescription>
         </div>
-          <AddAgentDialog />
+        <AddAgentDialog />
       </CardHeader>
       <CardContent>
         {loading ? (
-           <p className="text-center text-muted-foreground">Loading agents...</p>
+          <p className="text-center text-muted-foreground">Loading agents...</p>
         ) : (
           <Table>
             <TableHeader>
