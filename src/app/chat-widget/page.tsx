@@ -27,8 +27,6 @@ import { OpenAI } from 'openai';
 import ReactMarkdown from 'react-markdown';
 
 const ChatWidget = memo(function ChatWidget() {
-  console.log("ChatWidget component is rendering/mounting");
-
   const searchParams = useSearchParams();
   const chatId = searchParams.get('chatId');
   const origin = searchParams.get('origin');
@@ -92,7 +90,6 @@ const ChatWidget = memo(function ChatWidget() {
     );
 
     const unsubscribeMessages = onSnapshot(q, (snapshot) => {
-      console.log(`onSnapshot callback fired. Documents received: ${snapshot.size}`);
       const msgs = snapshot.docs.map((doc) => {
         const data = doc.data() as Message;
         if (data.timestamp instanceof Timestamp) data.timestamp = data.timestamp.toDate();

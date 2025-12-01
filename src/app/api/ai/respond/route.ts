@@ -24,7 +24,7 @@ export async function POST(request: Request) {
     // Check for "unsure" response to trigger handoff
     // We check for both English (legacy) and Albanian phrases to be safe, or just the current one.
     // The plan says we will switch to Albanian.
-    const handoffPhrase = "Nuk jam i sigurt për këtë, më lejoni t'ju lidh me një agjent njerëzor";
+    const handoffPhrase = "Më lejoni t'ju lidh me skuadren e suportit te klientit";
 
     if (result.response.includes(handoffPhrase)) {
       // Handoff logic: Update conversation status to 'pending'

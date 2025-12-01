@@ -40,40 +40,57 @@ export default function ConversationsLayout({
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
       setLoading(true);
-      const convos = await Promise.all(snapshot.docs.map(async (docSnap) => {
+
+      const docsData = snapshot.docs.map(docSnap => {
         const data = docSnap.data() as Conversation;
         data.id = docSnap.id;
-
-        // Convert Firestore Timestamps to JS Dates
         if (data.lastMessageAt instanceof Timestamp) {
           data.lastMessageAt = data.lastMessageAt.toDate();
         }
+        return data;
+      });
 
-        let agentDetails: Agent | undefined = undefined;
-        if (data.agent && data.agent instanceof DocumentReference) {
-          const agentId = data.agent.id;
-          if (agentCache.current[agentId]) {
-            console.log(`[Cache Hit] Using cached agent for ${agentId}`);
-            agentDetails = agentCache.current[agentId];
-          } else {
-            try {
-              console.log(`[Cache Miss] Fetching agent ${agentId} from Firestore`);
-              const agentSnap = await getDoc(data.agent);
-              if (agentSnap.exists()) {
-                agentDetails = agentSnap.data() as Agent;
-                agentCache.current[agentId] = agentDetails;
-              }
-            } catch (e) {
-              console.error("Error fetching agent:", e)
-            }
+      // 1. Identify unique agents that need fetching
+      const uniqueAgentRefs: Record<string, DocumentReference> = {};
+
+      docsData.forEach(convo => {
+        if (convo.agent && convo.agent instanceof DocumentReference) {
+          const agentId = convo.agent.id;
+          if (!agentCache.current[agentId]) {
+            uniqueAgentRefs[agentId] = convo.agent;
           }
+        }
+      });
+
+      // 2. Fetch missing agents in parallel
+      const missingAgentIds = Object.keys(uniqueAgentRefs);
+      if (missingAgentIds.length > 0) {
+        console.log(`Fetching ${missingAgentIds.length} missing agents...`);
+        await Promise.all(missingAgentIds.map(async (id) => {
+          try {
+            const snap = await getDoc(uniqueAgentRefs[id]);
+            if (snap.exists()) {
+              agentCache.current[id] = snap.data() as Agent;
+            }
+          } catch (e) {
+            console.error(`Error fetching agent ${id}:`, e);
+          }
+        }));
+      }
+
+      // 3. Map conversations with cached agents
+      const convos = docsData.map(data => {
+        let agentDetails: Agent | undefined = undefined;
+
+        if (data.agent && data.agent instanceof DocumentReference) {
+          agentDetails = agentCache.current[data.agent.id];
         } else if (data.agent) {
-          // It might already be populated in some cases, or be null
           agentDetails = data.agent as Agent;
         }
 
         return { ...data, agentDetails };
-      }));
+      });
+
       setConversations(convos);
       setLoading(false);
     });

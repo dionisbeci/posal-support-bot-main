@@ -14,7 +14,8 @@ import {
   getDoc,
   DocumentReference,
   Timestamp,
-  updateDoc
+  updateDoc,
+  limit
 } from 'firebase/firestore';
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -41,6 +42,7 @@ import {
   Bot,
   Loader,
   Sparkles,
+  LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -49,6 +51,7 @@ import {
   summarizeConversation,
   SummarizeConversationOutput,
 } from '@/ai/flows/summarize-conversation';
+import { analyzeConversation } from '@/ai/flows/analyze-conversation';
 import type { Message, Conversation, Agent } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { placeholderAgents } from '@/lib/placeholder-data';
@@ -102,7 +105,7 @@ export default function ConversationDetailPage() {
       }
     });
 
-    const q = query(collection(db, 'messages'), where('conversationId', '==', id), orderBy('timestamp', 'asc'));
+    const q = query(collection(db, 'messages'), where('conversationId', '==', id), orderBy('timestamp', 'asc'), limit(50));
     const unsubscribeMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => {
         const data = doc.data() as Message;
@@ -186,6 +189,38 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const handleAnalyze = async () => {
+    setIsAnalyzing(true);
+    try {
+      const conversationHistory = messages
+        .map((m) => `${m.role}: ${m.content}`)
+        .join('\n');
+
+      const result = await analyzeConversation({ conversationHistory });
+
+      const convoRef = doc(db, 'conversations', id);
+      await updateDoc(convoRef, {
+        tone: result.tone,
+        anger: result.anger,
+        frustration: result.frustration,
+        // We could also save resolutionStatus if needed
+      });
+
+      toast({ title: 'Analysis Updated' });
+    } catch (error) {
+      console.error("Error analyzing conversation:", error);
+      toast({
+        title: "Error",
+        description: "Could not analyze conversation.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleJoinConversation = async () => {
     if (!conversation) return;
 
@@ -196,7 +231,7 @@ export default function ConversationDetailPage() {
       await updateDoc(convoRef, {
         status: 'active',
         agent: {
-          id: 'mock-agent-id', // In a real app this would be auth.currentUser.uid
+          id: 'mock-agent-id',
           name: currentUser.name,
           email: currentUser.email,
           role: currentUser.role,
@@ -210,6 +245,48 @@ export default function ConversationDetailPage() {
       toast({
         title: "Error",
         description: "Could not join conversation.",
+        variant: "destructive"
+      });
+    }
+  };
+
+
+
+  const handleLeaveConversation = async () => {
+    if (!conversation) return;
+
+    try {
+      const convoRef = doc(db, 'conversations', conversation.id);
+
+      // 1. Update conversation status and remove agent
+      await updateDoc(convoRef, {
+        status: 'ai',
+        agent: null
+      });
+
+      // 2. Send the handoff message from the bot
+      const messagesCollection = collection(db, 'messages');
+      const messageContent = "Tani po bisedoni me asistentin tonë virtual.";
+
+      await addDoc(messagesCollection, {
+        role: 'ai',
+        content: messageContent,
+        conversationId: conversation.id,
+        timestamp: serverTimestamp(),
+      });
+
+      // 3. Update last message
+      await updateDoc(convoRef, {
+        lastMessage: messageContent,
+        lastMessageAt: serverTimestamp(),
+      });
+
+      toast({ title: 'You have left the conversation' });
+    } catch (error) {
+      console.error("Error leaving conversation:", error);
+      toast({
+        title: "Error",
+        description: "Could not leave conversation.",
         variant: "destructive"
       });
     }
@@ -341,8 +418,24 @@ export default function ConversationDetailPage() {
           </Card>
 
           <Card className="rounded-none border-0 border-b">
-            <CardHeader>
-              <CardTitle>Analysis</CardTitle>
+            <CardHeader className="pb-4">
+              <div className="flex flex-row items-center justify-between gap-4">
+                <CardTitle>Analysis</CardTitle>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-8 w-8 p-0"
+                  onClick={handleAnalyze}
+                  disabled={isAnalyzing}
+                >
+                  {isAnalyzing ? (
+                    <Loader className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-4 w-4" />
+                  )}
+                  <span className="sr-only">Analyze</span>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4 text-sm">
               <p>
@@ -351,11 +444,11 @@ export default function ConversationDetailPage() {
               </p>
               <p>
                 <strong>Anger:</strong>{' '}
-                <span className="capitalize">{conversation.anger || 'N/A'}</span>
+                <span className="capitalize">{conversation.anger ?? 'N/A'}</span>
               </p>
               <p>
                 <strong>Frustration (Customer):</strong>{' '}
-                <span className="capitalize">{conversation.frustration?.customer || 'N/A'}</span>
+                <span className="capitalize">{conversation.frustration?.customer ?? 'N/A'}</span>
               </p>
             </CardContent>
           </Card>
@@ -414,14 +507,25 @@ export default function ConversationDetailPage() {
 
         </ScrollArea>
         <div className="p-4 border-t">
-          <Button
-            className="w-full"
-            onClick={handleJoinConversation}
-            disabled={conversation.status === 'active' || conversation.status === 'archived'}
-          >
-            <UserCheck className="mr-2 h-4 w-4" />
-            {conversation.status === 'active' ? 'Joined' : 'Join Conversation'}
-          </Button>
+          {conversation.status === 'active' ? (
+            <Button
+              className="w-full"
+              variant="destructive"
+              onClick={handleLeaveConversation}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Leave Conversation
+            </Button>
+          ) : (
+            <Button
+              className="w-full"
+              onClick={handleJoinConversation}
+              disabled={conversation.status === 'archived'}
+            >
+              <UserCheck className="mr-2 h-4 w-4" />
+              Join Conversation
+            </Button>
+          )}
         </div>
       </aside>
     </div>

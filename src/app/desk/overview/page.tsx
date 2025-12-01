@@ -26,7 +26,7 @@ import {
   Legend,
 } from 'recharts';
 import { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, Timestamp, orderBy, getCountFromServer, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { subDays, format, isSameDay, startOfDay } from 'date-fns';
 
@@ -79,24 +79,35 @@ export default function OverviewPage() {
     const fetchStats = async () => {
       try {
         const sevenDaysAgo = subDays(new Date(), 7);
+
+        // 1. Total Conversations (Cheap Count)
+        // We use a separate query for the total count to avoid fetching all documents
+        const countQuery = query(
+          collection(db, 'conversations'),
+          where('lastMessageAt', '>=', sevenDaysAgo)
+        );
+        const countSnapshot = await getCountFromServer(countQuery);
+        const total = countSnapshot.data().count;
+
+        // 2. Detailed Stats (Limited Fetch)
+        // We limit this to 1000 to prevent massive read spikes on the dashboard
         const q = query(
           collection(db, 'conversations'),
           where('lastMessageAt', '>=', sevenDaysAgo),
-          orderBy('lastMessageAt', 'asc')
+          orderBy('lastMessageAt', 'asc'),
+          limit(1000)
         );
 
         const snapshot = await getDocs(q);
         const docs = snapshot.docs.map(d => d.data());
 
-        // 1. Total Conversations
-        const total = docs.length;
-
-        // 2. AI Handoff Rate (Pending + Active / Total)
-        // Assuming 'ai' status means purely AI, others mean human involved/needed
+        // 3. AI Handoff Rate (Pending + Active / Total from sample)
+        // We calculate rates based on the fetched sample (up to 1000)
+        const sampleTotal = docs.length;
         const humanInvolved = docs.filter(d => d.status === 'active' || d.status === 'pending').length;
-        const handoffRate = total > 0 ? Math.round((humanInvolved / total) * 100) : 0;
+        const handoffRate = sampleTotal > 0 ? Math.round((humanInvolved / sampleTotal) * 100) : 0;
 
-        // 3. Active Agents
+        // 4. Active Agents
         const agents = new Set(docs.map(d => d.agent?.id).filter(Boolean));
         const activeAgents = agents.size;
 
@@ -127,7 +138,7 @@ export default function OverviewPage() {
           },
         ]);
 
-        // 4. Chart Data
+        // 5. Chart Data
         // Group by day
         const days = [];
         for (let i = 0; i < 7; i++) {
@@ -182,8 +193,8 @@ export default function OverviewPage() {
               {stat.change && (
                 <p
                   className={`text-xs text-muted-foreground ${stat.change.startsWith('+')
-                      ? 'text-green-600'
-                      : 'text-red-600'
+                    ? 'text-green-600'
+                    : 'text-red-600'
                     }`}
                 >
                   {stat.change} from last week

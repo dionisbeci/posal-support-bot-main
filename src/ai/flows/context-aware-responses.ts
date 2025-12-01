@@ -41,7 +41,7 @@ async function useAssistantAPI(
 
     await openai.beta.threads.messages.create(currentThreadId, {
       role: 'user',
-      content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian. If you are unsure of the answer or if the user asks for a human, reply EXACTLY with: "Nuk jam i sigurt për këtë, më lejoni t'ju lidh me një agjent njerëzor" and nothing else.
+      content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian. If you are unsure of the answer or if the user asks for a human, reply EXACTLY with: "Më lejoni t'ju lidh me skuadren e suportit te klientit" and nothing else.
       
       User Message: ${input.message}`,
     });

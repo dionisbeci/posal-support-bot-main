@@ -1,7 +1,9 @@
+'use server';
+
 import { openai } from '@/ai/genkit';
 import { z } from 'zod';
 
-export const analyzeConversationOutputSchema = z.object({
+const analyzeConversationOutputSchema = z.object({
   tone: z.string(),
   anger: z.number().min(0).max(10),
   frustration: z.object({
