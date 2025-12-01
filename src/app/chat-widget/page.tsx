@@ -43,6 +43,8 @@ const ChatWidget = memo(function ChatWidget() {
   const [isSending, setIsSending] = useState(false);
   const [input, setInput] = useState('');
   const [conversationStatus, setConversationStatus] = useState<string>('ai');
+  const [agentTyping, setAgentTyping] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const initialize = async () => {
@@ -73,12 +75,25 @@ const ChatWidget = memo(function ChatWidget() {
   useEffect(() => {
     if (!conversationId) return;
 
-    // Listen to conversation status
+    // Listen to conversation status and typing
     const convoRef = doc(db, 'conversations', conversationId);
     const unsubscribeConvo = onSnapshot(convoRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setConversationStatus(data.status);
+        // Check if agent is typing
+        if (data.typing && data.typing.agent) {
+          // Check if the update is recent (e.g. within last 5 seconds)
+          const lastUpdate = data.typing.lastUpdate instanceof Timestamp ? data.typing.lastUpdate.toDate() : new Date();
+          const now = new Date();
+          if (now.getTime() - lastUpdate.getTime() < 5000) {
+            setAgentTyping(true);
+          } else {
+            setAgentTyping(false);
+          }
+        } else {
+          setAgentTyping(false);
+        }
       }
     });
 
@@ -106,7 +121,30 @@ const ChatWidget = memo(function ChatWidget() {
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
-  }, [messages, isSending]);
+  }, [messages, isSending, agentTyping]);
+
+  const handleTyping = async () => {
+    if (!conversationId) return;
+
+    // Clear existing timeout to debounce
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    // Update typing status to true
+    await updateDoc(doc(db, 'conversations', conversationId), {
+      'typing.visitor': true,
+      'typing.lastUpdate': serverTimestamp()
+    });
+
+    // Set timeout to reset typing status
+    typingTimeoutRef.current = setTimeout(async () => {
+      await updateDoc(doc(db, 'conversations', conversationId), {
+        'typing.visitor': false,
+        'typing.lastUpdate': serverTimestamp()
+      });
+    }, 2000);
+  };
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
@@ -115,6 +153,13 @@ const ChatWidget = memo(function ChatWidget() {
     const userInput = input;
     setInput('');
     setIsSending(true);
+
+    // Reset typing status immediately
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    await updateDoc(doc(db, 'conversations', conversationId), {
+      'typing.visitor': false,
+      'typing.lastUpdate': serverTimestamp()
+    });
 
     await addDoc(collection(db, 'messages'), {
       role: 'user',
@@ -176,7 +221,7 @@ const ChatWidget = memo(function ChatWidget() {
         <Avatar><AvatarFallback className="bg-primary text-primary-foreground"><Bot className="h-6 w-6" /></AvatarFallback></Avatar>
         <div>
           <p className="font-semibold">Posal Chat</p>
-          <p className="text-sm text-muted-foreground">We're here to help</p>
+          <p className="text-sm text-muted-foreground">Jemi këtu për t'ju ndihmuar</p>
         </div>
       </header>
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
@@ -196,7 +241,8 @@ const ChatWidget = memo(function ChatWidget() {
             </div>
           ))}
 
-          {isSending && (
+          {/* Typing Indicator */}
+          {(isSending || agentTyping) && (
             <div className="flex items-end gap-3">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className='bg-primary/20 text-primary'>
@@ -204,7 +250,11 @@ const ChatWidget = memo(function ChatWidget() {
                 </AvatarFallback>
               </Avatar>
               <div className="max-w-[75%] rounded-lg p-3 text-sm bg-card text-card-foreground border rounded-bl-none">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                {agentTyping ? (
+                  <span className="text-xs text-muted-foreground animate-pulse">Agjenti po shkruan...</span>
+                ) : (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                )}
               </div>
             </div>
           )}
@@ -213,9 +263,12 @@ const ChatWidget = memo(function ChatWidget() {
       <div className="border-t bg-background p-4">
         <form onSubmit={handleSendMessage} className="relative">
           <Textarea
-            placeholder="Type your message..."
+            placeholder="Shkruani mesazhin tuaj..."
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              handleTyping();
+            }}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
             className="pr-12"
             disabled={isSending}

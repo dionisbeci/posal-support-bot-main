@@ -17,6 +17,19 @@ export type Conversation = {
     agent: number;
   };
   resolutionStatus?: 'waiting from customer' | 'waiting from agent' | 'waiting from a coworker' | 'not resolvable' | 'redirected';
+  typing?: {
+    agent: boolean;
+    visitor: boolean;
+    lastUpdate: Timestamp | Date;
+  };
+};
+
+export type CannedResponse = {
+  id: string;
+  title: string;
+  content: string;
+  category?: string;
+  createdAt: Timestamp | Date;
 };
 
 export type Message = {
@@ -29,7 +42,7 @@ export type Message = {
 };
 
 export type Agent = {
-  id:string;
+  id: string;
   name: string;
   email: string;
   role: 'admin' | 'agent';
