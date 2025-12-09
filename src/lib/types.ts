@@ -22,6 +22,7 @@ export type Conversation = {
     visitor: boolean;
     lastUpdate: Timestamp | Date;
   };
+  title?: string;
 };
 
 export type CannedResponse = {

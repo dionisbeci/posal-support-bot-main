@@ -319,7 +319,7 @@ export default function ConversationDetailPage() {
               <AvatarFallback>{conversation.visitorId.substring(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
             <div>
-              <h2 className="font-semibold">Visitor {conversation.visitorId.substring(0, 6)}</h2>
+              <h2 className="font-semibold">{conversation.title || `Visitor ${conversation.visitorId.substring(0, 6)}`}</h2>
               <p className="text-sm text-muted-foreground">
                 {conversation.status === 'active' ? 'Active now' : `Last active ${new Date(conversation.lastMessageAt as Date).toLocaleTimeString()}`}
               </p>

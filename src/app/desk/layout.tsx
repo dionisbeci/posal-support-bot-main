@@ -138,7 +138,7 @@ export default function DeskLayout({
               >
                 <div className="flex items-center gap-3 w-full">
                   <Avatar className="h-8 w-8">
-                  {user?.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || ''} />}
+                    {user?.photoURL && <AvatarImage src={user.photoURL} alt={user.displayName || ''} />}
                     <AvatarFallback>
                       {user?.displayName
                         ? user.displayName.split(' ').map((n) => n[0]).join('')
@@ -183,14 +183,14 @@ export default function DeskLayout({
             <PanelLeft />
           </SidebarTrigger>
           <div className="flex-1">
-             <h1 className="text-xl font-semibold capitalize">
-              {pathname.split('/').pop()?.replace('-', ' ')}
+            <h1 className="text-xl font-semibold capitalize">
+              {pathname.includes('/desk/conversations/') ? 'Conversations' : pathname.split('/').pop()?.replace('-', ' ')}
             </h1>
           </div>
           {/* Header actions can go here */}
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </SidebarInset>
-    </SidebarProvider>
+    </SidebarProvider >
   );
 }

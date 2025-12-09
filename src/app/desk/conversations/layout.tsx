@@ -154,7 +154,7 @@ export default function ConversationsLayout({
                       <div className="flex-1 truncate">
                         <div className="flex items-baseline justify-between">
                           <p className="font-semibold truncate">
-                            {convo.agentDetails?.name || `Visitor ${convo.visitorId.substring(0, 6)}`}
+                            {convo.title || convo.agentDetails?.name || `Visitor ${convo.visitorId.substring(0, 6)}`}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {isClient ? formatDistanceToNow(new Date(convo.lastMessageAt as Date), {
@@ -192,6 +192,6 @@ export default function ConversationsLayout({
         </CardContent>
       </Card>
       <div className="bg-background">{children}</div>
-    </div>
+    </div >
   );
 }

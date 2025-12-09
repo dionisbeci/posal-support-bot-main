@@ -83,6 +83,41 @@ export async function POST(request: Request) {
       }
     }
 
+    // START: Generate Title Logic
+    if (conversationId) {
+      const { admin, db } = await import('@/lib/firebase-admin');
+      const convoRef = db.collection('conversations').doc(conversationId);
+      const convoSnap = await convoRef.get();
+      const convoData = convoSnap.data();
+
+      if (convoSnap.exists && !convoData?.title) {
+        // Fetch recent history for context
+        // The user message is already in Firestore (added by client).
+        // The AI response is NOT yet in Firestore (client adds it after this API returns).
+        const previousMessagesSnap = await db.collection('messages')
+          .where('conversationId', '==', conversationId)
+          .orderBy('timestamp', 'desc')
+          .limit(5)
+          .get();
+
+        const previousMessages = previousMessagesSnap.docs
+          .map((d) => ({ role: d.data().role, content: d.data().content }))
+          .reverse();
+
+        let history = previousMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
+        // Add the current AI response to history context
+        history += `\nai: ${result.response}`;
+
+        const { generateTitle } = await import('@/ai/flows/generate-title');
+        const { title } = await generateTitle({ conversationHistory: history });
+
+        if (title) {
+          await convoRef.update({ title });
+        }
+      }
+    }
+    // END: Generate Title Logic
+
     // Send the AI's response AND the threadId back to the frontend.
     // The frontend needs the threadId to continue the conversation.
     return NextResponse.json({
