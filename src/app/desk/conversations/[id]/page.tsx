@@ -311,9 +311,9 @@ export default function ConversationDetailPage() {
   }
 
   return (
-    <div className="grid h-[calc(100vh-65px)] grid-cols-1 md:grid-cols-[1fr_300px]">
-      <div className="flex flex-col border-r">
-        <header className="flex items-center justify-between border-b p-4">
+    <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[1fr_300px]">
+      <div className="flex flex-col border-r overflow-hidden">
+        <header className="flex items-center justify-between border-b p-4 shrink-0">
           <div className="flex items-center gap-3">
             <Avatar>
               <AvatarFallback>{conversation.visitorId.substring(0, 2).toUpperCase()}</AvatarFallback>
@@ -386,7 +386,7 @@ export default function ConversationDetailPage() {
           </div>
         </ScrollArea>
 
-        <div className="border-t p-4">
+        <div className="border-t p-4 shrink-0">
           <form onSubmit={handleSendMessage} className="flex gap-2">
             <Button type="button" variant="ghost" size="icon">
               <Paperclip className="h-5 w-5 text-muted-foreground" />
@@ -419,8 +419,8 @@ export default function ConversationDetailPage() {
         </div>
       </div>
 
-      <div className="border-l bg-muted/10 p-4">
-        <div className="space-y-6">
+      <ScrollArea className="border-l bg-muted/10 h-full">
+        <div className="p-4 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium">Customer Info</CardTitle>
@@ -545,7 +545,7 @@ export default function ConversationDetailPage() {
             </CardContent>
           </Card>
         </div>
-      </div>
+      </ScrollArea>
     </div>
   );
 }

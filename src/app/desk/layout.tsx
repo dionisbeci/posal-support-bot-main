@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { getAuth, onAuthStateChanged, User as FirebaseUser, signOut } from 'firebase/auth';
 import { app } from '@/lib/firebase';
+import { cn } from '@/lib/utils';
 
 import {
   SidebarProvider,
@@ -177,7 +178,7 @@ export default function DeskLayout({
           </DropdownMenu>
         </SidebarFooter>
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className={cn(pathname.includes('/desk/conversations') && "h-screen overflow-hidden")}>
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-sm px-4 md:px-6">
           <SidebarTrigger className="md:hidden">
             <PanelLeft />
@@ -189,7 +190,7 @@ export default function DeskLayout({
           </div>
           {/* Header actions can go here */}
         </header>
-        <main className="flex-1 p-4 md:p-6">{children}</main>
+        <main className={cn("flex-1", pathname.includes('/desk/conversations') ? "p-0 overflow-hidden" : "p-4 md:p-6")}>{children}</main>
       </SidebarInset>
     </SidebarProvider >
   );

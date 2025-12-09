@@ -112,7 +112,7 @@ export default function ConversationsLayout({
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] h-[calc(100vh-65px)]">
+    <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] h-full">
       <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0">
         <CardHeader className="p-4">
           <CardTitle>Conversations</CardTitle>
@@ -191,7 +191,7 @@ export default function ConversationsLayout({
           </ScrollArea>
         </CardContent>
       </Card>
-      <div className="bg-background">{children}</div>
+      <div className="bg-background h-full overflow-hidden">{children}</div>
     </div >
   );
 }
