@@ -1,18 +1,29 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { collection, onSnapshot, query, orderBy, getDoc, DocumentReference, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, getDoc, DocumentReference, limit, deleteDoc, doc } from 'firebase/firestore';
 
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search } from 'lucide-react';
+import { Search, Trash2, CheckSquare, X } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { db } from '@/lib/firebase';
 import type { Conversation, Agent } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
@@ -24,9 +35,14 @@ export default function ConversationsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [conversations, setConversations] = useState<(Conversation & { agentDetails?: Agent })[]>([]);
   const [loading, setLoading] = useState(true);
   const [limitCount, setLimitCount] = useState(50);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -111,33 +127,103 @@ export default function ConversationsLayout({
     }
   };
 
+  const toggleSelection = (id: string) => {
+    setSelectedIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await Promise.all(selectedIds.map(id => deleteDoc(doc(db, 'conversations', id))));
+
+      // If the current open conversation is deleted, navigate away
+      const currentId = pathname.split('/').pop();
+      if (currentId && selectedIds.includes(currentId)) {
+        router.push('/desk/conversations');
+      }
+
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+      setShowDeleteDialog(false);
+    } catch (error) {
+      console.error("Error deleting conversations:", error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] h-full">
-      <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0">
-        <CardHeader className="p-4">
-          <CardTitle>Conversations</CardTitle>
-          <div className="relative mt-2">
+      <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0">
+        <CardHeader className="p-4 shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <CardTitle>Conversations</CardTitle>
+            <div className="flex gap-1">
+              {isSelectionMode ? (
+                <>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={selectedIds.length === 0}
+                  >
+                    <Trash2 className="h-4 w-4 mr-1" />
+                    Delete ({selectedIds.length})
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => {
+                    setIsSelectionMode(false);
+                    setSelectedIds([]);
+                  }}>
+                    <X className="h-4 w-4 mr-1" />
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setIsSelectionMode(true)}>
+                  <CheckSquare className="h-4 w-4 mr-1" />
+                  Select
+                </Button>
+              )}
+            </div>
+          </div>
+          <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search..." className="pl-8" />
           </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <ScrollArea className="h-[calc(100vh-200px)]">
+        <CardContent className="p-0 flex-1 min-h-0">
+          <ScrollArea className="h-full min-h-0">
             <div className="flex flex-col">
               {loading && conversations.length === 0 ? (
                 <p className="p-4 text-muted-foreground">Loading conversations...</p>
               ) : (
                 <>
                   {conversations.map((convo) => (
-                    <Link
+                    <div
                       key={convo.id}
-                      href={`/desk/conversations/${convo.id}`}
                       className={cn(
-                        'flex items-start gap-4 p-4 hover:bg-muted/50 transition-colors border-b',
-                        pathname === `/desk/conversations/${convo.id}` &&
-                        'bg-muted'
+                        'flex items-center gap-2 p-4 border-b hover:bg-muted/50 transition-colors cursor-pointer',
+                        pathname === `/desk/conversations/${convo.id}` && !isSelectionMode && 'bg-muted'
                       )}
+                      onClick={(e) => {
+                        if (isSelectionMode) {
+                          e.preventDefault();
+                          toggleSelection(convo.id);
+                        } else {
+                          router.push(`/desk/conversations/${convo.id}`);
+                        }
+                      }}
                     >
+                      {isSelectionMode && (
+                        <Checkbox
+                          checked={selectedIds.includes(convo.id)}
+                          onCheckedChange={() => toggleSelection(convo.id)}
+                          className="mr-2"
+                        />
+                      )}
                       <div className="relative">
                         <Avatar className="h-10 w-10">
                           <AvatarImage src={convo.agentDetails?.avatar} />
@@ -173,13 +259,16 @@ export default function ConversationsLayout({
                           )}
                         </div>
                       </div>
-                    </Link>
+                    </div>
                   ))}
                   <div className="p-4">
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => setLimitCount(prev => prev + 50)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLimitCount(prev => prev + 50);
+                      }}
                       disabled={loading}
                     >
                       {loading ? 'Loading...' : 'Load More'}
@@ -191,7 +280,32 @@ export default function ConversationsLayout({
           </ScrollArea>
         </CardContent>
       </Card>
-      <div className="bg-background h-full overflow-hidden">{children}</div>
+
+      <div className="bg-background h-full overflow-hidden min-h-0">{children}</div>
+
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete {selectedIds.length} selected conversation{selectedIds.length !== 1 ? 's' : ''} and remove the data from our servers.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div >
   );
 }

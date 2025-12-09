@@ -312,7 +312,7 @@ export default function ConversationDetailPage() {
 
   return (
     <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[1fr_300px]">
-      <div className="flex flex-col border-r overflow-hidden">
+      <div className="flex flex-col border-r overflow-hidden min-h-0">
         <header className="flex items-center justify-between border-b p-4 shrink-0">
           <div className="flex items-center gap-3">
             <Avatar>
@@ -340,7 +340,7 @@ export default function ConversationDetailPage() {
           </div>
         </header>
 
-        <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+        <ScrollArea className="flex-1 p-4 min-h-0" ref={scrollAreaRef}>
           <div className="space-y-6">
             {messages.map((message) => (
               <div
@@ -419,7 +419,7 @@ export default function ConversationDetailPage() {
         </div>
       </div>
 
-      <ScrollArea className="border-l bg-muted/10 h-full">
+      <ScrollArea className="border-l bg-muted/10 h-full min-h-0">
         <div className="p-4 space-y-6">
           <Card>
             <CardHeader>
