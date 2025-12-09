@@ -34,7 +34,7 @@
 
 
 # Firebase Config
-src/lib/firebase.ts
+
 
 # Vercel
 .Vercel
