@@ -4,13 +4,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState, useRef } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { collection, onSnapshot, query, orderBy, getDoc, DocumentReference, limit, deleteDoc, doc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, getDoc, DocumentReference, limit, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 
 import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, Trash2, CheckSquare, X } from 'lucide-react';
+import { Search, Trash2, CheckSquare, X, Archive, RefreshCcw } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -43,6 +43,7 @@ export default function ConversationsLayout({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -154,40 +155,155 @@ export default function ConversationsLayout({
     }
   };
 
+  const filteredConversations = conversations.filter(convo =>
+    viewMode === 'active' ? convo.status !== 'archived' : convo.status === 'archived'
+  );
+
+  const handleSelectAll = () => {
+    if (selectedIds.length === filteredConversations.length && filteredConversations.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredConversations.map(c => c.id));
+    }
+  };
+
+  const handleArchive = async () => {
+    try {
+      await Promise.all(selectedIds.map(id => updateDoc(doc(db, 'conversations', id), { status: 'archived' })));
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+    } catch (error) {
+      console.error("Error archiving conversations:", error);
+    }
+  };
+
+
+
+  const handleUnarchive = async () => {
+    try {
+      await Promise.all(selectedIds.map(id => updateDoc(doc(db, 'conversations', id), { status: 'pending' })));
+      setSelectedIds([]);
+      setIsSelectionMode(false);
+    } catch (error) {
+      console.error("Error unarchiving conversations:", error);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] h-full">
       <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0">
         <CardHeader className="p-4 shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <CardTitle>Conversations</CardTitle>
-            <div className="flex gap-1">
-              {isSelectionMode ? (
-                <>
+            {isSelectionMode ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 w-full">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={
+                      filteredConversations.length > 0 &&
+                      selectedIds.length === filteredConversations.length
+                    }
+                    onCheckedChange={handleSelectAll}
+                    id="select-all"
+                  />
+                  <label
+                    htmlFor="select-all"
+                    className="font-semibold text-sm cursor-pointer select-none whitespace-nowrap"
+                  >
+                    {selectedIds.length} Selected
+                  </label>
+                </div>
+                <div className="flex flex-wrap justify-end gap-1">
+                  {viewMode === 'active' ? (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => handleArchive()}
+                      disabled={selectedIds.length === 0}
+                      title="Archive Selected"
+                    >
+                      <Archive className="h-4 w-4 sm:mr-1" />
+                      <span className="hidden sm:inline">Archive</span>
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => handleUnarchive()}
+                      disabled={selectedIds.length === 0}
+                      title="Unarchive Selected"
+                    >
+                      <RefreshCcw className="h-4 w-4 sm:mr-1" />
+                      <span className="hidden sm:inline">Unarchive</span>
+                    </Button>
+                  )}
                   <Button
                     variant="destructive"
                     size="sm"
                     className="h-8 px-2"
                     onClick={() => setShowDeleteDialog(true)}
                     disabled={selectedIds.length === 0}
+                    title="Delete Selected"
                   >
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete ({selectedIds.length})
+                    <Trash2 className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Delete</span>
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => {
-                    setIsSelectionMode(false);
-                    setSelectedIds([]);
-                  }}>
-                    <X className="h-4 w-4 mr-1" />
-                    Cancel
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 px-2"
+                    onClick={() => {
+                      setIsSelectionMode(false);
+                      setSelectedIds([]);
+                    }}
+                    title="Cancel Selection"
+                  >
+                    <X className="h-4 w-4 sm:mr-1" />
+                    <span className="hidden sm:inline">Cancel</span>
                   </Button>
-                </>
-              ) : (
-                <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setIsSelectionMode(true)}>
-                  <CheckSquare className="h-4 w-4 mr-1" />
-                  Select
-                </Button>
-              )}
-            </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                <CardTitle>{viewMode === 'active' ? 'Conversations' : 'Archived Chats'}</CardTitle>
+                <div className="flex gap-1">
+                  {viewMode === 'active' ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        setViewMode('archived');
+                        setIsSelectionMode(false);
+                        setSelectedIds([]);
+                      }}
+                      title="View Archived Chats"
+                    >
+                      <Archive className="h-4 w-4" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 px-2"
+                      onClick={() => {
+                        setViewMode('active');
+                        setIsSelectionMode(false);
+                        setSelectedIds([]);
+                      }}
+                      title="View Active Chats"
+                    >
+                      <RefreshCcw className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="h-8 px-2" onClick={() => setIsSelectionMode(true)}>
+                    <CheckSquare className="h-4 w-4 mr-1" />
+                    Select
+                  </Button>
+                </div>
+              </>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -201,7 +317,7 @@ export default function ConversationsLayout({
                 <p className="p-4 text-muted-foreground">Loading conversations...</p>
               ) : (
                 <>
-                  {conversations.map((convo) => (
+                  {filteredConversations.map((convo) => (
                     <div
                       key={convo.id}
                       className={cn(
