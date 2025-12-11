@@ -24,6 +24,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   User,
   Bot,
   Send,
@@ -31,7 +42,8 @@ import {
   UserCheck,
   LogOut,
   Sparkles,
-  Loader
+  Loader,
+  XCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeConversation } from '@/ai/flows/analyze-conversation';
@@ -103,6 +115,84 @@ export default function ConversationDetailPage() {
       unsubscribeMessages();
     };
   }, [id]);
+
+  // Keep refs updated for interval
+  const conversationRef = useRef(conversation);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    conversationRef.current = conversation;
+    messagesRef.current = messages;
+  }, [conversation, messages]);
+
+  // Auto-end chat on inactivity
+  useEffect(() => {
+    const checkInactivity = async () => {
+      const convo = conversationRef.current;
+      if (!convo || convo.status !== 'active') return;
+
+      const now = new Date();
+      let lastMessageTime: Date;
+
+      // Robust Date Parsing for lastMessageAt
+      if (convo.lastMessageAt instanceof Timestamp) {
+        lastMessageTime = convo.lastMessageAt.toDate();
+      } else if (convo.lastMessageAt instanceof Date) {
+        lastMessageTime = convo.lastMessageAt;
+      } else if (typeof convo.lastMessageAt === 'string' || typeof convo.lastMessageAt === 'number') {
+        lastMessageTime = new Date(convo.lastMessageAt);
+      } else {
+        // Fallback to messages if lastMessageAt is missing
+        const msgs = messagesRef.current;
+        if (msgs.length > 0 && msgs[0].timestamp) {
+          const lastMsg = msgs[0];
+          lastMessageTime = lastMsg.timestamp instanceof Timestamp
+            ? lastMsg.timestamp.toDate()
+            : (lastMsg.timestamp instanceof Date ? lastMsg.timestamp : new Date(lastMsg.timestamp));
+        } else {
+          // Only if absolute no data, fallback to now (prevents false positive close on load error)
+          lastMessageTime = new Date();
+        }
+      }
+
+      // Check validity of date
+      if (isNaN(lastMessageTime.getTime())) {
+        lastMessageTime = new Date();
+      }
+
+      const lastTypingTime = convo.typing?.lastUpdate instanceof Timestamp
+        ? convo.typing.lastUpdate.toDate()
+        : (convo.typing?.lastUpdate instanceof Date ? convo.typing.lastUpdate : new Date(0));
+
+      const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
+
+      if (now.getTime() - lastActivity > 5 * 60 * 1000) { // 5 minutes
+        try {
+          await addDoc(collection(db, 'messages'), {
+            role: 'system',
+            content: 'Biseda përfundoi.',
+            conversationId: id,
+            timestamp: serverTimestamp()
+          });
+
+          await updateDoc(doc(db, 'conversations', id), {
+            status: 'ended',
+            lastMessage: 'Biseda përfundoi.',
+            lastMessageAt: serverTimestamp()
+          });
+          toast({
+            title: "Chat Ended",
+            description: "The chat was ended due to inactivity.",
+          });
+        } catch (error) {
+          console.error("Error auto-ending chat:", error);
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkInactivity, 10000); // Check every 10 seconds
+    return () => clearInterval(intervalId);
+  }, [id, toast]);
 
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
@@ -269,6 +359,35 @@ export default function ConversationDetailPage() {
     }
   };
 
+  const handleEndChat = async () => {
+    try {
+      await addDoc(collection(db, 'messages'), {
+        role: 'system',
+        content: 'Biseda përfundoi.',
+        conversationId: id,
+        timestamp: serverTimestamp()
+      });
+
+      const convoRef = doc(db, 'conversations', id);
+      await updateDoc(convoRef, {
+        status: 'ended',
+        lastMessage: 'Biseda përfundoi.',
+        lastMessageAt: serverTimestamp()
+      });
+      toast({
+        title: "Chat Ended",
+        description: "The chat has been ended successfully.",
+      });
+    } catch (error) {
+      console.error("Error ending chat:", error);
+      toast({
+        title: "Error",
+        description: "Failed to end chat.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleJoinConversation = async () => {
     if (!conversation) return;
 
@@ -326,12 +445,37 @@ export default function ConversationDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {conversation.status === 'active' ? (
-              <Button variant="outline" size="sm" onClick={handleLeaveConversation}>
-                <LogOut className="mr-2 h-4 w-4" />
-                Leave Conversation
-              </Button>
-            ) : (
+            {conversation.status === 'active' && (
+              <>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive" size="sm">
+                      <XCircle className="mr-2 h-4 w-4" />
+                      End Chat
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>End Conversation?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to end this chat? This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleEndChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                        End Chat
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+                <Button variant="outline" size="sm" onClick={handleLeaveConversation}>
+                  <LogOut className="mr-2 h-4 w-4" />
+                  Leave Conversation
+                </Button>
+              </>
+            )}
+            {conversation.status !== 'active' && conversation.status !== 'ended' && (
               <Button size="sm" onClick={handleJoinConversation}>
                 <UserCheck className="mr-2 h-4 w-4" />
                 Join Conversation
@@ -410,8 +554,14 @@ export default function ConversationDetailPage() {
             <Button type="submit" size="icon" disabled={conversation.status !== 'active' || sending || !input.trim()}>
               <Send className="h-5 w-5" />
             </Button>
+
           </form>
-          {conversation.status !== 'active' && (
+          {conversation.status === 'ended' && (
+            <div className="mt-2 flex items-center justify-center p-2 bg-destructive/10 text-destructive rounded-md text-sm font-medium">
+              Conversation Ended
+            </div>
+          )}
+          {conversation.status !== 'active' && conversation.status !== 'ended' && (
             <p className="mt-2 text-center text-xs text-muted-foreground">
               You must join the conversation to reply.
             </p>
@@ -546,6 +696,6 @@ export default function ConversationDetailPage() {
           </Card>
         </div>
       </ScrollArea>
-    </div>
+    </div >
   );
 }

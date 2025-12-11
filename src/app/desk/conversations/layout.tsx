@@ -14,6 +14,7 @@ import { Search, Trash2, CheckSquare, X, Archive, RefreshCcw } from 'lucide-reac
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -364,10 +365,21 @@ export default function ConversationsLayout({
                             }) : ''}
                           </p>
                         </div>
-                        <div className="flex items-center justify-between mt-1">
-                          <p className="text-sm text-muted-foreground truncate">
+                        <div className="flex items-center gap-2 mt-1">
+                          {convo.status === 'ended' ? (
+                            <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold">
+                              Chat Ended
+                            </Badge>
+                          ) : (
+                            <Badge className="h-5 px-1.5 text-[10px] bg-green-500 hover:bg-green-600 uppercase font-bold border-transparent text-white">
+                              In Progress
+                            </Badge>
+                          )}
+                          <p className="text-sm text-muted-foreground truncate flex-1">
                             {convo.lastMessage}
                           </p>
+                        </div>
+                        <div className="flex justify-end mt-1">
                           {convo.unreadCount > 0 && (
                             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
                               {convo.unreadCount}

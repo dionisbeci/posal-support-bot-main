@@ -78,9 +78,13 @@ const ChatWidget = memo(function ChatWidget() {
     // Listen to conversation status and typing
     const convoRef = doc(db, 'conversations', conversationId);
     const unsubscribeConvo = onSnapshot(convoRef, (docSnap) => {
+      // ... existing snapshot logic ...
       if (docSnap.exists()) {
         const data = docSnap.data();
         setConversationStatus(data.status);
+        // Update ref for timeout logic
+        conversationDataRef.current = { ...data, id: conversationId };
+
         // Check if agent is typing
         if (data.typing && data.typing.agent) {
           // Check if the update is recent (e.g. within last 5 seconds)
@@ -96,7 +100,8 @@ const ChatWidget = memo(function ChatWidget() {
         }
       }
     });
-
+    // ... existing message listener ...
+    // ...
     const q = query(
       collection(db, 'messages'),
       where('conversationId', '==', conversationId),
@@ -116,6 +121,92 @@ const ChatWidget = memo(function ChatWidget() {
       unsubscribeConvo();
       unsubscribeMessages();
     };
+  }, [conversationId]);
+
+  // Refs for timeout logic
+  const conversationDataRef = useRef<any>(null);
+  const messagesRef = useRef<Message[]>([]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Auto-end check on widget side (Backup if agent is offline)
+  useEffect(() => {
+    if (!conversationId) return;
+
+    const checkInactivity = async () => {
+      const convo = conversationDataRef.current;
+      if (!convo || convo.status !== 'active') return; // Only check active chats
+
+      const now = new Date();
+      let lastMessageTime: Date;
+
+      // Robust Date Parsing logic (Shared with Desk)
+      if (convo.lastMessageAt && typeof convo.lastMessageAt.toDate === 'function') {
+        lastMessageTime = convo.lastMessageAt.toDate();
+      } else if (convo.lastMessageAt instanceof Date) {
+        lastMessageTime = convo.lastMessageAt;
+      } else if (typeof convo.lastMessageAt === 'string' || typeof convo.lastMessageAt === 'number') {
+        lastMessageTime = new Date(convo.lastMessageAt);
+      } else {
+        // Fallback to messages
+        const msgs = messagesRef.current;
+        // Messages are in reverse order in state (oldest first)? No, layout says `setMessages(msgs.reverse())` 
+        // Wait, layout says `setMessages(msgs.reverse())` in `onSnapshot`?
+        // In `page.tsx` (widget), `orderBy('timestamp', 'desc')`. `msgs` is High->Low.
+        // `setMessages(msgs.reverse())` makes it Low->High (Old->New) for rendering.
+        // So `messages[messages.length - 1]` is the LATEST message.
+
+        const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+
+        if (latestMsg && latestMsg.timestamp) {
+          lastMessageTime = latestMsg.timestamp instanceof Timestamp
+            ? latestMsg.timestamp.toDate()
+            : (latestMsg.timestamp instanceof Date ? latestMsg.timestamp : new Date(latestMsg.timestamp));
+        } else {
+          lastMessageTime = new Date(); // Fallback if absolutely no info
+        }
+      }
+
+      if (isNaN(lastMessageTime.getTime())) lastMessageTime = new Date();
+
+      const lastTypingTime = convo.typing?.lastUpdate instanceof Timestamp
+        ? convo.typing.lastUpdate.toDate()
+        : convo.typing?.lastUpdate && convo.typing.lastUpdate.toDate ? convo.typing.lastUpdate.toDate() : new Date(0);
+
+      const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
+
+      if (now.getTime() - lastActivity > 5 * 60 * 1000) { // 5 minutes
+        try {
+          // We can also send the system message from here if needed, but lets rely on one source or handle duplicates gracefully.
+          // Firestore writes are idempotent-ish for status updates, but system messages might duplicate if both sides fire.
+          // To be safe, we will just update status to ended if we detect it.
+          // Actually, let's just do it. Duplicate 'Biseda përfundoi' messages are lesser evil than chat not ending.
+          // Or we can check if the last message is already "Biseda përfundoi."
+
+          if (convo.lastMessage === 'Biseda përfundoi.') return;
+
+          await addDoc(collection(db, 'messages'), {
+            role: 'system',
+            content: 'Biseda përfundoi.',
+            conversationId,
+            timestamp: serverTimestamp()
+          });
+
+          await updateDoc(doc(db, 'conversations', conversationId), {
+            status: 'ended',
+            lastMessage: 'Biseda përfundoi.',
+            lastMessageAt: serverTimestamp()
+          });
+        } catch (error) {
+          console.error("Widget auto-end error:", error);
+        }
+      }
+    };
+
+    const intervalId = setInterval(checkInactivity, 10000); // Check every 10s
+    return () => clearInterval(intervalId);
   }, [conversationId]);
 
   useEffect(() => {
@@ -148,7 +239,7 @@ const ChatWidget = memo(function ChatWidget() {
 
   const handleSendMessage = async (e: FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || !conversationId || isSending) return;
+    if (!input.trim() || !conversationId || isSending || conversationStatus === 'ended') return;
 
     const userInput = input;
     setInput('');
@@ -261,22 +352,28 @@ const ChatWidget = memo(function ChatWidget() {
         </div>
       </ScrollArea>
       <div className="border-t bg-background p-4">
-        <form onSubmit={handleSendMessage} className="relative">
-          <Textarea
-            placeholder="Shkruani mesazhin tuaj..."
-            value={input}
-            onChange={(e) => {
-              setInput(e.target.value);
-              handleTyping();
-            }}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
-            className="pr-12"
-            disabled={isSending}
-          />
-          <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
-            <Send className="h-5 w-5 text-primary" />
-          </Button>
-        </form>
+        {conversationStatus === 'ended' ? (
+          <div className="flex items-center justify-center p-3 bg-red-50 text-red-600 rounded-md text-sm font-medium border border-red-100">
+            Biseda përfundoi
+          </div>
+        ) : (
+          <form onSubmit={handleSendMessage} className="relative">
+            <Textarea
+              placeholder="Shkruani mesazhin tuaj..."
+              value={input}
+              onChange={(e) => {
+                setInput(e.target.value);
+                handleTyping();
+              }}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+              className="pr-12"
+              disabled={isSending}
+            />
+            <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
+              <Send className="h-5 w-5 text-primary" />
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   );
