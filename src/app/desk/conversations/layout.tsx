@@ -45,6 +45,7 @@ export default function ConversationsLayout({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'ended'>('all');
 
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -156,9 +157,20 @@ export default function ConversationsLayout({
     }
   };
 
-  const filteredConversations = conversations.filter(convo =>
-    viewMode === 'active' ? convo.status !== 'archived' : convo.status === 'archived'
-  );
+  const filteredConversations = conversations.filter(convo => {
+    if (viewMode === 'active') {
+      if (convo.status === 'archived') return false;
+
+      if (statusFilter === 'in_progress') {
+        return ['active', 'pending', 'ai'].includes(convo.status);
+      } else if (statusFilter === 'ended') {
+        return convo.status === 'ended';
+      }
+      return true;
+    } else {
+      return convo.status === 'archived';
+    }
+  });
 
   const handleSelectAll = () => {
     if (selectedIds.length === filteredConversations.length && filteredConversations.length > 0) {
@@ -310,6 +322,41 @@ export default function ConversationsLayout({
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input placeholder="Search..." className="pl-8" />
           </div>
+          {viewMode === 'active' && (
+            <div className="flex items-center gap-2 mt-2 px-1">
+              <Badge
+                variant={statusFilter === 'all' ? "secondary" : "outline"}
+                className="cursor-pointer hover:bg-secondary/80"
+                onClick={() => setStatusFilter('all')}
+              >
+                All
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "cursor-pointer border-transparent",
+                  statusFilter === 'in_progress'
+                    ? "bg-green-500 text-white hover:bg-green-600"
+                    : "bg-green-500/10 text-green-700 hover:bg-green-500/20 hover:text-green-800"
+                )}
+                onClick={() => setStatusFilter('in_progress')}
+              >
+                In Progress
+              </Badge>
+              <Badge
+                variant="outline"
+                className={cn(
+                  "cursor-pointer border-transparent",
+                  statusFilter === 'ended'
+                    ? "bg-red-500 text-white hover:bg-red-600"
+                    : "bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-800"
+                )}
+                onClick={() => setStatusFilter('ended')}
+              >
+                Chat Ended
+              </Badge>
+            </div>
+          )}
         </CardHeader>
         <CardContent className="p-0 flex-1 min-h-0">
           <ScrollArea className="h-full min-h-0">
