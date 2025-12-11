@@ -65,10 +65,30 @@ const ChatWidget = memo(function ChatWidget() {
           }
         }
 
+        // Get GPS location for accurate geolocation
+        let gpsLocation = null;
+        if (navigator.geolocation) {
+          try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+              navigator.geolocation.getCurrentPosition(resolve, reject, {
+                timeout: 5000,
+                enableHighAccuracy: true,
+                maximumAge: 0
+              });
+            });
+            gpsLocation = {
+              latitude: position.coords.latitude,
+              longitude: position.coords.longitude
+            };
+          } catch (e) {
+            console.warn('Failed to get GPS location, will use IP fallback', e);
+          }
+        }
+
         const res = await fetch('/api/init-chat-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, origin, params, clientHints }),
+          body: JSON.stringify({ chatId, origin, params, clientHints, gpsLocation }),
         });
         const response = await res.json();
         if (response.success && response.token && response.conversationId) {
