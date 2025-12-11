@@ -23,6 +23,16 @@ export type Conversation = {
     lastUpdate: Timestamp | Date;
   };
   title?: string;
+  device?: {
+    browser?: string;
+    os?: string;
+    type?: string;
+  };
+  location?: {
+    country?: string;
+    city?: string;
+    ip?: string;
+  };
 };
 
 export type CannedResponse = {

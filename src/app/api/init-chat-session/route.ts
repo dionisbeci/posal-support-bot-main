@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db, admin } from '@/lib/firebase-admin';
+import { UAParser } from 'ua-parser-js';
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { chatId, origin, params } = body;
+    const { chatId, origin, params, clientHints } = body;
 
     if (!chatId || !origin) {
       return NextResponse.json({ success: false, message: 'Missing chatId or origin' }, { status: 400 });
@@ -70,8 +71,58 @@ export async function POST(req: Request) {
       }
     }
 
+    // Check domain if not allowed (existing logic...)
+
+    // Parse Device Info
+    const uaString = req.headers.get('user-agent') || '';
+    const parser = new UAParser(uaString);
+    const result = parser.getResult();
+
+    // Parse IP and Location
+    const forwardedFor = req.headers.get('x-forwarded-for');
+    const ip = forwardedFor ? forwardedFor.split(',')[0] : 'Unknown';
+
+    let locationData = { country: 'Unknown', city: 'Unknown', ip };
+
+    const isPrivateIp = (ip: string) => {
+      return /^(::ffff:)?(10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.|127\.|::1)/.test(ip);
+    };
+
+    if (ip !== 'Unknown') {
+      if (isPrivateIp(ip)) {
+        locationData = { country: 'Local Network', city: 'Private IP', ip };
+      } else {
+        try {
+          const geoRes = await fetch(`http://ip-api.com/json/${ip}?fields=status,message,country,city,query`, { signal: AbortSignal.timeout(3000) });
+          if (geoRes.ok) {
+            const geoData = await geoRes.json();
+            if (geoData.status === 'success') {
+              locationData = {
+                country: geoData.country,
+                city: geoData.city,
+                ip: geoData.query
+              };
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to fetch location data:', e);
+        }
+      }
+    }
+
     // Now run the rest in parallel
     const tokenPromise = auth.createCustomToken(visitorId);
+
+    // Refine OS with Client Hints for Windows 11
+    let osString = `${result.os.name || 'Unknown'} ${result.os.version || ''}`.trim();
+
+    if (clientHints && clientHints.platform === 'Windows') {
+      const majorVersion = parseInt(clientHints.platformVersion?.split('.')[0] || '0');
+      // Windows 11 is version 13.0.0+ in Client Hints
+      if (majorVersion >= 13) {
+        osString = 'Windows 11';
+      }
+    }
 
     // Create conversation
     const conversationData: any = {
@@ -80,7 +131,14 @@ export async function POST(req: Request) {
       status: 'ai',
       unreadCount: 0,
       lastMessageAt: admin.firestore.FieldValue.serverTimestamp(),
+
       agent: null,
+      device: {
+        browser: `${result.browser.name || 'Unknown'} ${result.browser.major || ''}`.trim(),
+        os: osString,
+        type: result.device.type || 'Desktop'
+      },
+      location: locationData
     };
 
     const conversationsCollection = db.collection('conversations');

@@ -583,11 +583,16 @@ export default function ConversationDetailPage() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Location</span>
-                  <span>Tirana, Albania</span>
+                  <span>
+                    {conversation.location?.city || 'Unknown'}, {conversation.location?.country || 'Unknown'}
+                    {conversation.location?.ip && conversation.location.ip !== 'Unknown' && (
+                      <span className="block text-[10px] text-right text-muted-foreground">{conversation.location.ip}</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Device</span>
-                  <span>Chrome / Windows</span>
+                  <span>{conversation.device?.browser || 'Unknown'} / {conversation.device?.os || 'Unknown'}</span>
                 </div>
               </div>
             </CardContent>

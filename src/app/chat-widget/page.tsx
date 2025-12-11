@@ -50,10 +50,25 @@ const ChatWidget = memo(function ChatWidget() {
     const initialize = async () => {
       if (!chatId || !origin) return;
       try {
+        let clientHints = {};
+        // @ts-ignore
+        if (navigator.userAgentData) {
+          try {
+            // @ts-ignore
+            const uaData = await navigator.userAgentData.getHighEntropyValues(['platform', 'platformVersion']);
+            clientHints = {
+              platform: uaData.platform,
+              platformVersion: uaData.platformVersion
+            };
+          } catch (e) {
+            console.warn('Failed to get UA data', e);
+          }
+        }
+
         const res = await fetch('/api/init-chat-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, origin, params }),
+          body: JSON.stringify({ chatId, origin, params, clientHints }),
         });
         const response = await res.json();
         if (response.success && response.token && response.conversationId) {
