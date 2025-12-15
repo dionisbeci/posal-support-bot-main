@@ -34,17 +34,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import {
-  User,
-  Bot,
-  Send,
-  Paperclip,
-  UserCheck,
-  LogOut,
-  Sparkles,
-  Loader,
-  XCircle
-} from 'lucide-react';
+import { Paperclip, Loader2, Sparkles, XCircle, LogOut, UserCheck, Bot, User, PanelRightClose, PanelRightOpen, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeConversation } from '@/ai/flows/analyze-conversation';
 import { summarizeConversation, SummarizeConversationOutput } from '@/ai/flows/summarize-conversation';
@@ -362,6 +352,7 @@ export default function ConversationDetailPage() {
   const [summary, setSummary] = useState<SummarizeConversationOutput | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryLanguage, setSummaryLanguage] = useState<'en' | 'sq'>('en');
+  const [isInfoOpen, setIsInfoOpen] = useState(true);
 
   const handleSummarize = async () => {
     setIsSummarizing(true);
@@ -493,7 +484,7 @@ export default function ConversationDetailPage() {
   }
 
   return (
-    <div className="grid h-full grid-cols-1 overflow-hidden md:grid-cols-[1fr_300px]">
+    <div className={cn("grid h-full grid-cols-1 overflow-hidden transition-all duration-300 ease-in-out", isInfoOpen ? "md:grid-cols-[1fr_300px]" : "md:grid-cols-[1fr_0px]")}>
       <div className="flex flex-col border-r overflow-hidden min-h-0">
         <header className="flex items-center justify-between border-b p-4 shrink-0">
           <div className="flex items-center gap-3">
@@ -544,11 +535,22 @@ export default function ConversationDetailPage() {
                 Join Conversation
               </Button>
             )}
+            <Button variant="ghost" size="icon" onClick={() => setIsInfoOpen(!isInfoOpen)} title={isInfoOpen ? "Close Info" : "Open Info"}>
+              {isInfoOpen ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
+            </Button>
           </div>
         </header>
 
         <ScrollArea className="flex-1 p-4 min-h-0" ref={scrollAreaRef}>
           <div className="space-y-6">
+            <div className="flex flex-col gap-2 items-center justify-center pb-4 text-muted-foreground">
+              <span className="text-xs">
+                {(() => {
+                  const date = conversation.lastMessageAt instanceof Timestamp ? conversation.lastMessageAt.toDate() : new Date(conversation.lastMessageAt as Date);
+                  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                })()}
+              </span>
+            </div>
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -665,7 +667,7 @@ export default function ConversationDetailPage() {
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Analysis</CardTitle>
               <Button variant="ghost" size="icon" className="h-4 w-4" onClick={handleAnalyze} disabled={isAnalyzing}>
-                {isAnalyzing ? <Loader className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                {isAnalyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
               </Button>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
@@ -738,7 +740,7 @@ export default function ConversationDetailPage() {
                     disabled={isSummarizing}
                   >
                     {isSummarizing ? (
-                      <Loader className="h-3 w-3 animate-spin" />
+                      <Loader2 className="h-3 w-3 animate-spin" />
                     ) : (
                       <Sparkles className="h-3 w-3" />
                     )}
@@ -749,7 +751,7 @@ export default function ConversationDetailPage() {
             <CardContent className="text-sm text-muted-foreground pt-0">
               {isSummarizing && (
                 <div className="flex items-center gap-2 py-4 text-xs">
-                  <Loader className="h-3 w-3 animate-spin" />
+                  <Loader2 className="h-3 w-3 animate-spin" />
                   <span>Generating summary in {summaryLanguage === 'sq' ? 'Albanian' : 'English'}...</span>
                 </div>
               )}
