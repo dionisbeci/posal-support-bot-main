@@ -129,7 +129,7 @@ export default function ConversationDetailPage() {
   useEffect(() => {
     const checkInactivity = async () => {
       const convo = conversationRef.current;
-      if (!convo || convo.status !== 'active') return;
+      if (!convo || !['active', 'ai'].includes(convo.status)) return;
 
       const now = new Date();
       let lastMessageTime: Date;
@@ -166,7 +166,7 @@ export default function ConversationDetailPage() {
 
       const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
 
-      if (now.getTime() - lastActivity > 5 * 60 * 1000) { // 5 minutes
+      if (now.getTime() - lastActivity > 3 * 60 * 1000) { // 3 minutes
         try {
           await addDoc(collection(db, 'messages'), {
             role: 'system',
@@ -190,7 +190,7 @@ export default function ConversationDetailPage() {
       }
     };
 
-    const intervalId = setInterval(checkInactivity, 10000); // Check every 10 seconds
+    const intervalId = setInterval(checkInactivity, 10000);
     return () => clearInterval(intervalId);
   }, [id, toast]);
 
@@ -202,18 +202,14 @@ export default function ConversationDetailPage() {
   const handleTyping = async () => {
     if (!conversation) return;
 
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-
-    // Update typing status
     await updateDoc(doc(db, 'conversations', id), {
       'typing.agent': true,
       'typing.lastUpdate': serverTimestamp()
     });
 
-    // Set timeout to reset
     typingTimeoutRef.current = setTimeout(async () => {
       await updateDoc(doc(db, 'conversations', id), {
         'typing.agent': false,
@@ -230,7 +226,6 @@ export default function ConversationDetailPage() {
     setInput('');
     setSending(true);
 
-    // Reset typing status
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     await updateDoc(doc(db, 'conversations', id), {
       'typing.agent': false,

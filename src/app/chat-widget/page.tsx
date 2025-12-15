@@ -172,7 +172,7 @@ const ChatWidget = memo(function ChatWidget() {
 
     const checkInactivity = async () => {
       const convo = conversationDataRef.current;
-      if (!convo || convo.status !== 'active') return; // Only check active chats
+      if (!convo || !['active', 'ai'].includes(convo.status)) return; // Check active and ai chats
 
       const now = new Date();
       let lastMessageTime: Date;
@@ -212,7 +212,7 @@ const ChatWidget = memo(function ChatWidget() {
 
       const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
 
-      if (now.getTime() - lastActivity > 5 * 60 * 1000) { // 5 minutes
+      if (now.getTime() - lastActivity > 3 * 60 * 1000) { // 3 minutes
         try {
           // We can also send the system message from here if needed, but lets rely on one source or handle duplicates gracefully.
           // Firestore writes are idempotent-ish for status updates, but system messages might duplicate if both sides fire.

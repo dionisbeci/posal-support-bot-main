@@ -28,6 +28,7 @@ import {
 import { db } from '@/lib/firebase';
 import type { Conversation, Agent } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
+import { GlobalChatCleanup } from '@/components/GlobalChatCleanup';
 
 
 export default function ConversationsLayout({
@@ -204,6 +205,7 @@ export default function ConversationsLayout({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[350px_1fr] h-full">
+      <GlobalChatCleanup />
       <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0">
         <CardHeader className="p-4 shrink-0">
           <div className="flex items-center justify-between mb-2">
