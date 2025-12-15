@@ -16,6 +16,7 @@ export type Conversation = {
     customer: number;
     agent: number;
   };
+  lastAnalyzedAt?: Date | Timestamp;
   resolutionStatus?: 'waiting from customer' | 'waiting from agent' | 'waiting from a coworker' | 'not resolvable' | 'redirected';
   typing?: {
     agent: boolean;
