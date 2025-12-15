@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Search, Trash2, CheckSquare, X, Archive, RefreshCcw } from 'lucide-react';
+import { Search, Trash2, CheckSquare, X, Archive, RefreshCcw, Bot, User } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -391,11 +391,35 @@ export default function ConversationsLayout({
                         />
                       )}
                       <div className="relative">
-                        <Avatar className="h-10 w-10">
-                          <AvatarImage src={convo.agentDetails?.avatar} />
-                          <AvatarFallback>
-                            {convo.visitorId.substring(0, 2).toUpperCase()}
-                          </AvatarFallback>
+                        <Avatar className="h-10 w-10 overflow-hidden">
+                          {((convo.status === 'ai' || convo.status === 'pending') && !convo.humanInvolved) ? (
+                            <div className="flex h-full w-full items-center justify-center bg-blue-100 text-blue-600">
+                              <Bot className="h-6 w-6" />
+                            </div>
+                          ) : (convo.status === 'active' || convo.humanInvolved) ? (
+                            <div className="relative h-full w-full flex">
+                              {/* Split View: Left Half Bot, Right Half Agent */}
+                              <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-blue-100 flex items-center justify-center">
+                                <Bot className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-muted flex items-center justify-center overflow-hidden">
+                                {convo.agentDetails?.avatar ? (
+                                  <img src={convo.agentDetails.avatar} alt="Agent" className="h-full w-full object-cover" />
+                                ) : (
+                                  <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                                    <User className="h-4 w-4 text-gray-500" />
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <AvatarImage src={convo.agentDetails?.avatar} />
+                              <AvatarFallback>
+                                {convo.visitorId.substring(0, 2).toUpperCase()}
+                              </AvatarFallback>
+                            </>
+                          )}
                         </Avatar>
                         <span
                           className={`absolute bottom-0 right-0 block h-2.5 w-2.5 rounded-full ring-2 ring-card ${getStatusColor(
@@ -424,9 +448,21 @@ export default function ConversationsLayout({
                               In Progress
                             </Badge>
                           )}
-                          <p className="text-sm text-muted-foreground truncate flex-1">
-                            {convo.lastMessage}
-                          </p>
+                          {convo.typing?.visitor && (() => {
+                            const lastUpdate = convo.typing.lastUpdate instanceof Timestamp
+                              ? convo.typing.lastUpdate.toDate()
+                              : (convo.typing.lastUpdate instanceof Date ? convo.typing.lastUpdate : new Date(0));
+                            // Check if typing status is fresh (e.g. within last 5 seconds)
+                            return new Date().getTime() - lastUpdate.getTime() < 5000;
+                          })() ? (
+                            <p className="text-sm text-green-600 italic font-medium truncate flex-1 animate-pulse">
+                              Typing...
+                            </p>
+                          ) : (
+                            <p className="text-sm text-muted-foreground truncate flex-1">
+                              {convo.lastMessage}
+                            </p>
+                          )}
                         </div>
                         <div className="flex justify-end mt-1">
                           {convo.unreadCount > 0 && (

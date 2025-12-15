@@ -466,6 +466,7 @@ export default function ConversationDetailPage() {
 
       await updateDoc(convoRef, {
         status: 'active',
+        humanInvolved: true,
         // agent: doc(db, 'agents', 'mock-agent-id') // If we had an agents collection
       });
 
