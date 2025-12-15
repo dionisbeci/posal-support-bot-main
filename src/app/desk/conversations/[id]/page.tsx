@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect, FormEvent, useRef } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   doc,
   onSnapshot,
@@ -34,14 +34,18 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { Paperclip, Loader2, Sparkles, XCircle, LogOut, UserCheck, Bot, User, PanelRightClose, PanelRightOpen, Send } from 'lucide-react';
+import { Paperclip, Loader2, Sparkles, XCircle, LogOut, UserCheck, Bot, User, PanelRightClose, PanelRightOpen, Send, ChevronLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { analyzeConversation } from '@/ai/flows/analyze-conversation';
 import { summarizeConversation, SummarizeConversationOutput } from '@/ai/flows/summarize-conversation';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function ConversationDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const isMobile = useIsMobile();
   const id = params.id as string;
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
@@ -352,7 +356,15 @@ export default function ConversationDetailPage() {
   const [summary, setSummary] = useState<SummarizeConversationOutput | null>(null);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [summaryLanguage, setSummaryLanguage] = useState<'en' | 'sq'>('en');
-  const [isInfoOpen, setIsInfoOpen] = useState(true);
+  const [isInfoOpen, setIsInfoOpen] = useState(false);
+
+  useEffect(() => {
+    if (isMobile === false) {
+      setIsInfoOpen(true);
+    } else if (isMobile === true) {
+      setIsInfoOpen(false);
+    }
+  }, [isMobile]);
 
   const handleSummarize = async () => {
     setIsSummarizing(true);
@@ -488,6 +500,9 @@ export default function ConversationDetailPage() {
       <div className="flex flex-col border-r overflow-hidden min-h-0">
         <header className="flex items-center justify-between border-b p-4 shrink-0">
           <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={() => router.push('/desk/conversations')}>
+              <ChevronLeft className="h-6 w-6" />
+            </Button>
             <Avatar>
               <AvatarFallback>{conversation.visitorId.substring(0, 2).toUpperCase()}</AvatarFallback>
             </Avatar>
@@ -541,7 +556,7 @@ export default function ConversationDetailPage() {
           </div>
         </header>
 
-        <ScrollArea className="flex-1 p-4 min-h-0" ref={scrollAreaRef}>
+        <ScrollArea className="flex-1 p-4 min-h-0 overscroll-contain" ref={scrollAreaRef}>
           <div className="space-y-6">
             <div className="flex flex-col gap-2 items-center justify-center pb-4 text-muted-foreground">
               <span className="text-xs">
@@ -634,7 +649,7 @@ export default function ConversationDetailPage() {
         </div>
       </div>
 
-      <ScrollArea className="border-l bg-muted/10 h-full min-h-0">
+      <ScrollArea className={cn("border-l bg-muted/10 h-full min-h-0 hidden md:block")}>
         <div className="p-4 space-y-6">
           <Card>
             <CardHeader>
@@ -766,6 +781,148 @@ export default function ConversationDetailPage() {
           </Card>
         </div>
       </ScrollArea>
-    </div >
+
+      {isMobile && (
+        <Sheet open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+          <SheetContent side="right" className="p-0 w-[85vw] sm:max-w-md flex flex-col">
+            <SheetHeader className="px-4 py-4 border-b shrink-0">
+              <SheetTitle>Conversation Details</SheetTitle>
+            </SheetHeader>
+            <ScrollArea className="flex-1 h-full">
+              <div className="p-4 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">Customer Info</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">ID</span>
+                        <span className="font-mono">{conversation.visitorId.substring(0, 8)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Location</span>
+                        <span>
+                          {conversation.location?.city || 'Unknown'}, {conversation.location?.country || 'Unknown'}
+                          {conversation.location?.ip && conversation.location.ip !== 'Unknown' && (
+                            <span className="block text-[10px] text-right text-muted-foreground">{conversation.location.ip}</span>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Device</span>
+                        <span>{conversation.device?.browser || 'Unknown'} / {conversation.device?.os || 'Unknown'}</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <CardTitle className="text-sm font-medium">Analysis</CardTitle>
+                    <Button variant="ghost" size="icon" className="h-4 w-4" onClick={handleAnalyze} disabled={isAnalyzing}>
+                      {isAnalyzing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+                    </Button>
+                  </CardHeader>
+                  <CardContent className="space-y-4 pt-4">
+                    <div>
+                      <span className="text-xs text-muted-foreground">Tone</span>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge variant="secondary" className="capitalize">
+                          {conversation.tone || 'N/A'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Anger Level</span>
+                      <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className="h-full bg-red-500 transition-all"
+                          style={{ width: `${(conversation.anger ?? 0) * 10}%` }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-muted-foreground">Frustration</span>
+                      <div className="mt-1 grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Customer</span>
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                            <div
+                              className="h-full bg-orange-500 transition-all"
+                              style={{ width: `${(conversation.frustration?.customer ?? 0) * 10}%` }}
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-muted-foreground">Agent</span>
+                          <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-secondary">
+                            <div
+                              className="h-full bg-blue-500 transition-all"
+                              style={{ width: `${(conversation.frustration?.agent ?? 0) * 10}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-4">
+                    <div className="flex flex-row items-center justify-between gap-4">
+                      <CardTitle className="text-sm font-medium">AI Summary</CardTitle>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={summaryLanguage}
+                          onValueChange={(value: 'en' | 'sq') => setSummaryLanguage(value)}
+                          disabled={isSummarizing}
+                        >
+                          <SelectTrigger className="h-8 w-[100px] text-xs">
+                            <SelectValue placeholder="Language" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="en">English</SelectItem>
+                            <SelectItem value="sq">Albanian</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 w-8 p-0"
+                          onClick={handleSummarize}
+                          disabled={isSummarizing}
+                        >
+                          {isSummarizing ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm text-muted-foreground pt-0">
+                    {isSummarizing && (
+                      <div className="flex items-center gap-2 py-4 text-xs">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Generating summary in {summaryLanguage === 'sq' ? 'Albanian' : 'English'}...</span>
+                      </div>
+                    )}
+                    {summary ? (
+                      <div className="rounded-md bg-muted/50 p-3 text-sm leading-relaxed text-foreground">
+                        {summary.summary}
+                      </div>
+                    ) : (
+                      !isSummarizing && <p className="text-xs text-muted-foreground">Select a language and click the sparkles to get an AI summary.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            </ScrollArea>
+          </SheetContent>
+        </Sheet>
+      )}
+    </div>
   );
 }

@@ -204,10 +204,15 @@ export default function ConversationsLayout({
     }
   };
 
+  // Check if we are in a detail view (not just /desk/conversations)
+  const isDetailPage = pathname !== '/desk/conversations' && pathname.includes('/desk/conversations');
+
   return (
-    <div className={cn("grid h-full transition-all duration-300 ease-in-out", isCollapsed ? "grid-cols-[50px_1fr]" : "grid-cols-1 md:grid-cols-[350px_1fr]")}>
+    <div className={cn("grid h-full transition-all duration-300 ease-in-out",
+      isCollapsed ? "grid-cols-1 md:grid-cols-[50px_1fr]" : "grid-cols-1 md:grid-cols-[350px_1fr]"
+    )}>
       {isCollapsed ? (
-        <div className="border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0 bg-background items-center py-4 gap-4">
+        <div className={cn("border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0 bg-background items-center py-4 gap-4", isDetailPage ? "hidden md:flex" : "flex")}>
           <GlobalChatCleanup />
           <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(false)} title="Expand Conversations">
             <PanelLeftOpen className="h-4 w-4" />
@@ -216,7 +221,7 @@ export default function ConversationsLayout({
       ) : (
         <>
           <GlobalChatCleanup />
-          <Card className="rounded-none border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0">
+          <Card className={cn("rounded-none border-r border-t-0 border-b-0 border-l-0 flex-col h-full min-h-0", isDetailPage ? "hidden md:flex" : "flex")}>
             <CardHeader className="p-4 shrink-0">
               <div className="flex items-center justify-between mb-2">
                 {isSelectionMode ? (
@@ -376,7 +381,7 @@ export default function ConversationsLayout({
               )}
             </CardHeader>
             <CardContent className="p-0 flex-1 min-h-0">
-              <ScrollArea className="h-full min-h-0">
+              <ScrollArea className="h-full min-h-0 overscroll-contain">
                 <div className="flex flex-col">
                   {loading && conversations.length === 0 ? (
                     <p className="p-4 text-muted-foreground">Loading conversations...</p>
@@ -504,7 +509,7 @@ export default function ConversationsLayout({
         </>
       )}
 
-      <div className="bg-background h-full overflow-hidden min-h-0">{children}</div>
+      <div className={cn("bg-background h-full overflow-hidden min-h-0", !isDetailPage ? "hidden md:block" : "block")}>{children}</div>
 
       <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
         <AlertDialogContent>
