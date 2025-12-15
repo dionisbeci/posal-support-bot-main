@@ -392,11 +392,7 @@ export default function ConversationsLayout({
                       )}
                       <div className="relative">
                         <Avatar className="h-10 w-10 overflow-hidden">
-                          {((convo.status === 'ai' || convo.status === 'pending') && !convo.humanInvolved) ? (
-                            <div className="flex h-full w-full items-center justify-center bg-blue-100 text-blue-600">
-                              <Bot className="h-6 w-6" />
-                            </div>
-                          ) : (convo.status === 'active' || convo.humanInvolved) ? (
+                          {convo.humanInvolved || convo.status === 'active' ? (
                             <div className="relative h-full w-full flex">
                               {/* Split View: Left Half Bot, Right Half Agent */}
                               <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-blue-100 flex items-center justify-center">
@@ -413,12 +409,9 @@ export default function ConversationsLayout({
                               </div>
                             </div>
                           ) : (
-                            <>
-                              <AvatarImage src={convo.agentDetails?.avatar} />
-                              <AvatarFallback>
-                                {convo.visitorId.substring(0, 2).toUpperCase()}
-                              </AvatarFallback>
-                            </>
+                            <div className="flex h-full w-full items-center justify-center bg-blue-100 text-blue-600">
+                              <Bot className="h-6 w-6" />
+                            </div>
                           )}
                         </Avatar>
                         <span
