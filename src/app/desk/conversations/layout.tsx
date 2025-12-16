@@ -28,7 +28,7 @@ import {
 import { db } from '@/lib/firebase';
 import type { Conversation, Agent } from '@/lib/types';
 import { Timestamp } from 'firebase/firestore';
-import { GlobalChatCleanup } from '@/components/GlobalChatCleanup';
+import { serverTimestamp, addDoc } from 'firebase/firestore';
 
 
 export default function ConversationsLayout({
@@ -117,7 +117,53 @@ export default function ConversationsLayout({
     });
 
     return () => unsubscribe();
+    return () => unsubscribe();
   }, [limitCount]);
+
+  // AUTOMATIC CLEANUP LOGIC (Optimized: No extra reads)
+  // Replaces GlobalChatCleanup polling
+  useEffect(() => {
+    const checkCleanup = async () => {
+      const now = Date.now();
+      const threeMinutes = 3 * 60 * 1000;
+
+      // Filter locally
+      const staleChats = conversations.filter(c =>
+        (c.status === 'active' || c.status === 'ai') &&
+        c.lastMessageAt &&
+        (now - (c.lastMessageAt instanceof Date ? c.lastMessageAt.getTime() : 0) > threeMinutes)
+      );
+
+      for (const chat of staleChats) {
+        // Double check to avoid race conditions or endless loops
+        if (chat.lastMessage === 'Biseda përfundoi.') continue;
+
+        console.log(`Auto-ending stale chat: ${chat.id}`);
+        try {
+          // 1. Update status
+          await updateDoc(doc(db, 'conversations', chat.id), {
+            status: 'ended',
+            lastMessage: 'Biseda përfundoi.',
+            lastMessageAt: serverTimestamp()
+          });
+
+          // 2. Add system message
+          await addDoc(collection(db, 'messages'), {
+            role: 'system',
+            content: 'Biseda përfundoi.',
+            conversationId: chat.id,
+            timestamp: serverTimestamp()
+          });
+        } catch (e) {
+          console.error("Cleanup error", e);
+        }
+      }
+    };
+
+    // Run check every 30 seconds
+    const interval = setInterval(checkCleanup, 30 * 1000);
+    return () => clearInterval(interval);
+  }, [conversations]); // Re-run when list updates (safe because logic is idempotent-ish via lastMessage check)
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -213,14 +259,12 @@ export default function ConversationsLayout({
     )}>
       {isCollapsed ? (
         <div className={cn("border-r border-t-0 border-b-0 border-l-0 flex flex-col h-full min-h-0 bg-background items-center py-4 gap-4", isDetailPage ? "hidden md:flex" : "flex")}>
-          <GlobalChatCleanup />
           <Button variant="ghost" size="icon" onClick={() => setIsCollapsed(false)} title="Expand Conversations">
             <PanelLeftOpen className="h-4 w-4" />
           </Button>
         </div>
       ) : (
         <>
-          <GlobalChatCleanup />
           <Card className={cn("rounded-none border-r border-t-0 border-b-0 border-l-0 flex-col h-full min-h-0", isDetailPage ? "hidden md:flex" : "flex")}>
             <CardHeader className="p-4 shrink-0">
               <div className="flex items-center justify-between mb-2">
