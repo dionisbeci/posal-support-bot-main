@@ -8,6 +8,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import {
   signInWithEmailAndPassword,
   sendPasswordResetEmail,
+  setPersistence,
+  browserLocalPersistence,
+  browserSessionPersistence,
 } from 'firebase/auth';
 import { Eye, EyeOff } from 'lucide-react';
 
@@ -36,6 +39,7 @@ import { useAuth } from '@/hooks/use-auth';
 const loginSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email.' }),
   password: z.string().min(1, { message: 'Password is required.' }),
+  rememberMe: z.boolean().optional(),
 });
 
 type LoginFormValues = z.infer<typeof loginSchema>;
@@ -44,6 +48,13 @@ export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('rememberMe');
+      return saved ? JSON.parse(saved) : true; // Default to true
+    }
+    return true;
+  });
   const { user } = useAuth();
 
   useEffect(() => {
@@ -57,11 +68,21 @@ export default function LoginPage() {
     defaultValues: {
       email: '',
       password: '',
+      rememberMe: true,
     },
   });
 
   const onSubmit = async (data: LoginFormValues) => {
     try {
+      // Set persistence based on "Remember me" checkbox
+      const persistence = rememberMe ? browserLocalPersistence : browserSessionPersistence;
+      await setPersistence(auth, persistence);
+
+      // Save preference for next time
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('rememberMe', JSON.stringify(rememberMe));
+      }
+
       await signInWithEmailAndPassword(auth, data.email, data.password);
       toast({
         title: 'Login Successful',
@@ -171,6 +192,21 @@ export default function LoginPage() {
                   </FormItem>
                 )}
               />
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <label
+                  htmlFor="rememberMe"
+                  className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer select-none"
+                >
+                  Keep me logged in
+                </label>
+              </div>
               <Button
                 type="submit"
                 className="w-full"
