@@ -14,7 +14,12 @@ import {
   Timestamp,
   limit,
 } from 'firebase/firestore';
-import { getAuth, signInWithCustomToken } from 'firebase/auth';
+import {
+  getAuth,
+  signInWithCustomToken,
+  setPersistence,
+  browserSessionPersistence,
+} from 'firebase/auth';
 import { app, db } from '@/lib/firebase';
 import type { Message } from '@/lib/types';
 import { cn } from '@/lib/utils';
@@ -93,6 +98,8 @@ const ChatWidget = memo(function ChatWidget() {
         const response = await res.json();
         if (response.success && response.token && response.conversationId) {
           const auth = getAuth(app);
+          // Use session persistence to avoid conflicting with the Desk (Admin) session in the same browser
+          await setPersistence(auth, browserSessionPersistence);
           await signInWithCustomToken(auth, response.token);
           setConversationId(response.conversationId);
         } else {

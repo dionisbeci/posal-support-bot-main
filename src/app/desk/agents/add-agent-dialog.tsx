@@ -31,7 +31,9 @@ import {
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { PlusCircle } from 'lucide-react';
+
 import { useToast } from '@/hooks/use-toast';
+import { CredentialsDialog } from './credentials-dialog';
 
 const addAgentSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
@@ -45,13 +47,17 @@ type AddAgentFormValues = z.infer<typeof addAgentSchema>;
 
 export function AddAgentDialog() {
   const [open, setOpen] = useState(false);
+  const [createdAgent, setCreatedAgent] = useState<{ email: string; password?: string } | null>(null);
   const { toast } = useToast();
-  
+
   const form = useForm<AddAgentFormValues>({
     resolver: zodResolver(addAgentSchema),
     defaultValues: {
+      name: '',
+      email: '',
       role: 'agent',
       avatar: 'https://picsum.photos/id/1005/100/100', // Default avatar
+      password: '',
     },
   });
 
@@ -81,13 +87,19 @@ export function AddAgentDialog() {
 
       const passwordMsg = result.password ? ` Temporary password: ${result.password}` : '';
 
-      toast({
-        title: 'Success',
-        description: `Agent added successfully.${passwordMsg}`,
-      });
-
+      // Close the form dialog
       setOpen(false);
       form.reset();
+
+      // Open the credentials dialog
+      if (result.password) {
+        setCreatedAgent({ email: data.email, password: result.password });
+      } else {
+        toast({
+          title: 'Success',
+          description: `Agent added successfully.`,
+        });
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -98,105 +110,115 @@ export function AddAgentDialog() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button size="sm" className="gap-1">
-          <PlusCircle className="h-4 w-4" />
-          Add Agent
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add New Agent</DialogTitle>
-          <DialogDescription>
-            Add a new team member to manage conversations.
-          </DialogDescription>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="John Doe" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="john.doe@example.com"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="role"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Role</FormLabel>
-                  <Select
-                    onValueChange={field.onChange}
-                    defaultValue={field.value}
-                  >
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogTrigger asChild>
+          <Button size="sm" className="gap-1">
+            <PlusCircle className="h-4 w-4" />
+            Add Agent
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add New Agent</DialogTitle>
+            <DialogDescription>
+              Add a new team member to manage conversations.
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Name</FormLabel>
                     <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a role" />
-                      </SelectTrigger>
+                      <Input placeholder="John Doe" {...field} />
                     </FormControl>
-                    <SelectContent>
-                      <SelectItem value="agent">Agent</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="avatar"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Avatar URL</FormLabel>
-                  <FormControl>
-                    <Input
-                      placeholder="https://example.com/avatar.jpg"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Add Agent</Button>
-            </div>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="john.doe@example.com"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Role</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="agent">Agent</SelectItem>
+                        <SelectItem value="admin">Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="avatar"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Avatar URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="https://example.com/avatar.jpg"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="flex justify-end gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit">Add Agent</Button>
+              </div>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+      <CredentialsDialog
+        open={!!createdAgent}
+        onOpenChange={(open) => !open && setCreatedAgent(null)}
+        title="Agent Created"
+        description="The account has been created successfully. Send these credentials to the new agent."
+        email={createdAgent?.email || ''}
+        password={createdAgent?.password}
+      />
+    </>
   );
 }

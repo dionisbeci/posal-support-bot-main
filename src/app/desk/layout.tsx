@@ -49,12 +49,15 @@ export default function DeskLayout({
   const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = React.useState<FirebaseUser | null>(null);
+  const [isAdmin, setIsAdmin] = React.useState(false);
 
   React.useEffect(() => {
     const auth = getAuth(app);
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setUser(user);
+        const tokenResult = await user.getIdTokenResult();
+        setIsAdmin(tokenResult.claims.role === 'admin');
       } else {
         router.push('/login');
       }
@@ -83,6 +86,7 @@ export default function DeskLayout({
       href: '/desk/agents',
       icon: Users,
       label: 'Agents',
+      adminOnly: true,
     },
     {
       href: '/desk/settings',
@@ -90,6 +94,8 @@ export default function DeskLayout({
       label: 'Settings',
     },
   ];
+
+  const filteredNavItems = navItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
     <SidebarProvider>
@@ -107,7 +113,7 @@ export default function DeskLayout({
         </SidebarHeader>
         <SidebarContent>
           <SidebarMenu>
-            {navItems.map((item) => (
+            {filteredNavItems.map((item) => (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
                   asChild
