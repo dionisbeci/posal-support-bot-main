@@ -367,7 +367,13 @@ const ChatWidget = memo(function ChatWidget() {
                 </AvatarFallback>
               </Avatar>
               <div className={cn('max-w-[75%] rounded-lg p-3 text-sm', message.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-card text-card-foreground border rounded-bl-none', 'prose prose-sm max-w-none')}>
-                <ReactMarkdown>
+                <ReactMarkdown
+                  components={{
+                    a: ({ node, ...props }) => (
+                      <a {...props} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline" />
+                    ),
+                  }}
+                >
                   {message.content}
                 </ReactMarkdown>
               </div>
