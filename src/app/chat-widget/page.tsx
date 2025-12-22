@@ -175,7 +175,7 @@ const ChatWidget = memo(function ChatWidget() {
 
   // Auto-end check on widget side (Backup if agent is offline)
   useEffect(() => {
-    if (!conversationId) return;
+    if (!conversationId || conversationStatus === 'ended') return;
 
     const checkInactivity = async () => {
       const convo = conversationDataRef.current;
@@ -221,11 +221,12 @@ const ChatWidget = memo(function ChatWidget() {
 
       if (now.getTime() - lastActivity > 3 * 60 * 1000) { // 3 minutes
         try {
-          // We can also send the system message from here if needed, but lets rely on one source or handle duplicates gracefully.
-          // Firestore writes are idempotent-ish for status updates, but system messages might duplicate if both sides fire.
-          // To be safe, we will just update status to ended if we detect it.
-          // Actually, let's just do it. Duplicate 'Biseda përfundoi' messages are lesser evil than chat not ending.
-          // Or we can check if the last message is already "Biseda përfundoi."
+
+          // Check if last message is already "Biseda përfundoi." in the messages list
+          // This prevents infinite loops if conversation status update fails or is delayed
+          const currentMsgs = messagesRef.current;
+          const lastMsg = currentMsgs.length > 0 ? currentMsgs[currentMsgs.length - 1] : null;
+          if (lastMsg && lastMsg.content === 'Biseda përfundoi.') return;
 
           if (convo.lastMessage === 'Biseda përfundoi.') return;
 
@@ -249,7 +250,7 @@ const ChatWidget = memo(function ChatWidget() {
 
     const intervalId = setInterval(checkInactivity, 10000); // Check every 10s
     return () => clearInterval(intervalId);
-  }, [conversationId]);
+  }, [conversationId, conversationStatus]);
 
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
