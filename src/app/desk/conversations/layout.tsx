@@ -48,11 +48,29 @@ export default function ConversationsLayout({
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
   const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'ended'>('all');
   const [isCollapsed, setIsCollapsed] = useState(false);
-
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
   }, []);
+
+  const alertedIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!isClient) return;
+    conversations.forEach(convo => {
+      // Only alert for AI/Pending/Active chats that are handled by AI (status ai or pending usually)
+      if (convo.status !== 'ended' && convo.status !== 'archived' && convo.confidenceScore !== undefined && convo.confidenceScore < 20) {
+        if (!alertedIds.current.has(convo.id)) {
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+          audio.play().catch(e => console.log('Audio play failed:', e));
+          alertedIds.current.add(convo.id);
+        }
+      } else if (convo.confidenceScore === undefined || convo.confidenceScore >= 20 || convo.status === 'ended') {
+        alertedIds.current.delete(convo.id);
+      }
+    });
+  }, [conversations, isClient]);
+
 
   const agentCache = useRef<Record<string, Agent>>({});
 
@@ -499,6 +517,24 @@ export default function ConversationsLayout({
                               {convo.status === 'ended' ? (
                                 <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold">
                                   Chat Ended
+                                </Badge>
+                              ) : convo.status === 'active' ? (
+                                <Badge className="h-5 px-1.5 text-[10px] bg-blue-600 hover:bg-blue-700 uppercase font-bold border-transparent text-white">
+                                  Joined: {convo.agentDetails?.name || 'Agent'}
+                                </Badge>
+                              ) : convo.confidenceScore !== undefined ? (
+                                <Badge
+                                  className={cn(
+                                    "h-5 px-1.5 text-[10px] uppercase font-bold border-transparent text-white transition-all",
+                                    convo.confidenceScore >= 80 ? "bg-green-500 hover:bg-green-600" :
+                                      convo.confidenceScore >= 50 ? "bg-yellow-500 hover:bg-yellow-600 text-black" :
+                                        convo.confidenceScore >= 40 ? "bg-red-500 hover:bg-red-600" :
+                                          convo.confidenceScore >= 30 ? "bg-red-600 hover:bg-red-700" :
+                                            convo.confidenceScore >= 20 ? "bg-red-700 hover:bg-red-800" :
+                                              "bg-red-900 hover:bg-red-950 animate-pulse"
+                                  )}
+                                >
+                                  {convo.confidenceScore}% AI Confidence
                                 </Badge>
                               ) : (
                                 <Badge className="h-5 px-1.5 text-[10px] bg-green-500 hover:bg-green-600 uppercase font-bold border-transparent text-white">

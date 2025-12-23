@@ -11,6 +11,7 @@ export type Conversation = {
   unreadCount: number;
   threadId?: string; // OpenAI Assistant thread ID for conversation context
   tone?: string;
+  confidenceScore?: number;
   humanInvolved?: boolean;
   anger?: number;
   frustration?: {

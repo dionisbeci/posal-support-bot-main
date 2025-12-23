@@ -22,6 +22,7 @@ export type ContextAwareResponseInput = z.infer<typeof ContextAwareResponseInput
 const ContextAwareResponseOutputSchema = z.object({
   response: z.string(),
   threadId: z.string().optional(),
+  confidence: z.number().optional(),
 });
 export type ContextAwareResponseOutput = z.infer<typeof ContextAwareResponseOutputSchema>;
 
@@ -41,8 +42,24 @@ async function useAssistantAPI(
 
     await openai.beta.threads.messages.create(currentThreadId, {
       role: 'user',
-      content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian. If you are really unsure of the answer or have nothing to reply with, or if the user asks for a human, reply EXACTLY with: "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?" and nothing else. DO NOT reply with this message if it is something unrelated with the POS program. In this case let the conversation continue normally.
+      content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian.
       
+      You are an expert on the "POS.al" system.
+      1. If the user asks about POS.al, answer helpfully.
+      2. If the user asks about UNRELATED topics (sports, politics, weather, etc.), politely REFUSE to answer. Say you only focus on POS.al. DO NOT apologize excessively.
+      
+      HANDOFF PHRASE:
+      If you are genuinely UNSURE about a POS.al question, or if the user explicitly asks for a human agent, you MUST reply with this EXACT phrase:
+      "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?"
+
+      CONFIDENCE SCORE RULES:
+      At the very end of your response, you MUST append a confidence score tag: [[CONFIDENCE:score]].
+      
+      - answering POS.al question correctly: [[CONFIDENCE:100]]
+      - answering POS.al question with some doubt: [[CONFIDENCE:60]]
+      - refusing an UNRELATED topic (e.g. "Who won the game?"): [[CONFIDENCE:75]] (This is a valid response, so do not give 0).
+      - using the HANDOFF PHRASE (unsure about POS question): [[CONFIDENCE:0]]
+
       User Message: ${input.message}`,
     });
 
@@ -67,12 +84,22 @@ async function useAssistantAPI(
       const assistantMessage = messages.data.find(msg => msg.role === 'assistant');
 
       if (assistantMessage && assistantMessage.content[0].type === 'text') {
-        const response = assistantMessage.content[0].text.value;
-        return { response, threadId: currentThreadId };
+        let response = assistantMessage.content[0].text.value;
+        let confidence = 0;
+
+        // Parse [[CONFIDENCE:xx]] tag
+        const confidenceMatch = response.match(/\[\[CONFIDENCE:(\d+)\]\]/);
+        if (confidenceMatch) {
+          confidence = parseInt(confidenceMatch[1], 10);
+          // Remove the tag from the response shown to user
+          response = response.replace(/\[\[CONFIDENCE:\d+\]\]/, '').trim();
+        }
+
+        return { response, threadId: currentThreadId, confidence };
       }
     }
 
-    const errorMessage = run.last_error ? run.last_error.message : `Run ended with status: ${run.status}`;
+    const errorMessage = run.last_error ? run.last_error.message : `Run ended with status: ${run.status} `;
     throw new Error(errorMessage);
 
   } catch (err: any) {
@@ -107,7 +134,7 @@ async function useChatCompletions(
     if (!response) {
       return { response: 'Sorry, I could not generate a response.' };
     }
-    return { response, threadId: input.threadId ?? undefined };
+    return { response, threadId: input.threadId ?? undefined, confidence: 0 };
   } catch (err: any) {
     console.error('Error in useChatCompletions:', err);
     throw err;

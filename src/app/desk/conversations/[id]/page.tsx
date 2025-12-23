@@ -11,6 +11,7 @@ import {
   addDoc,
   serverTimestamp,
   updateDoc,
+  getDoc,
   Timestamp,
   limit,
 } from 'firebase/firestore';
@@ -41,6 +42,7 @@ import { summarizeConversation, SummarizeConversationOutput } from '@/ai/flows/s
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/hooks/use-auth';
 
 export default function ConversationDetailPage() {
   const params = useParams();
@@ -54,9 +56,19 @@ export default function ConversationDetailPage() {
   const [sending, setSending] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { user: authUser } = useAuth();
 
   const [visitorTyping, setVisitorTyping] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [currentAgentProfile, setCurrentAgentProfile] = useState<any>(null);
+
+  useEffect(() => {
+    if (authUser?.uid) {
+      getDoc(doc(db, 'agents', authUser.uid)).then(snap => {
+        if (snap.exists()) setCurrentAgentProfile(snap.data());
+      });
+    }
+  }, [authUser]);
 
   useEffect(() => {
     const convoRef = doc(db, 'conversations', id);
@@ -300,8 +312,8 @@ export default function ConversationDetailPage() {
         conversationId: id,
         timestamp: serverTimestamp(),
         agent: {
-          name: 'Support Agent', // In a real app, get from auth context
-          avatar: 'https://github.com/shadcn.png',
+          name: currentAgentProfile?.name || authUser?.displayName || 'Support Agent',
+          avatar: authUser?.photoURL || currentAgentProfile?.avatar || 'https://github.com/shadcn.png',
         },
       });
 
@@ -389,7 +401,17 @@ export default function ConversationDetailPage() {
   };
 
   const handleLeaveConversation = async () => {
-    if (!conversation) return;
+    if (!conversation || !authUser) return;
+
+    // Security: Only the assigned agent can leave
+    if ((conversation.agent as any)?.id !== authUser.uid) {
+      toast({
+        title: "Action Denied",
+        description: "Only the agent handling this chat can leave it.",
+        variant: "destructive"
+      });
+      return;
+    }
 
     try {
       // 1. Send "Bot is back" message
@@ -405,6 +427,7 @@ export default function ConversationDetailPage() {
       await updateDoc(convoRef, {
         status: 'ai',
         agent: null,
+        confidenceScore: 100,
         lastMessage: "Tani po bisedoni me asistentin tonë virtual.",
         lastMessageAt: serverTimestamp()
       });
@@ -456,21 +479,44 @@ export default function ConversationDetailPage() {
   const handleJoinConversation = async () => {
     if (!conversation) return;
 
+    // Force refresh check or just trust status
+    if (conversation.status === 'active') {
+      toast({
+        title: "Already Joined",
+        description: "Another agent is already handling this conversation.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     try {
       const convoRef = doc(db, 'conversations', id);
-      // Assign current agent (mock for now)
-      const mockAgent = {
-        id: 'mock-agent-id',
-        name: 'Support Agent',
-        email: 'agent@example.com',
-        role: 'agent',
-        avatar: 'https://github.com/shadcn.png'
+
+      // Fetch actual agent data from Firestore to get the correct avatar/name
+      let agentProfile: any = null;
+      if (authUser?.uid) {
+        try {
+          const agentDoc = await getDoc(doc(db, 'agents', authUser.uid));
+          if (agentDoc.exists()) {
+            agentProfile = agentDoc.data();
+          }
+        } catch (e) {
+          console.error("Error fetching agent profile:", e);
+        }
+      }
+
+      const currentAgent = {
+        id: authUser?.uid || 'unknown',
+        name: agentProfile?.name || authUser?.displayName || 'Support Agent',
+        email: authUser?.email || '',
+        role: (agentProfile?.role as 'agent' | 'admin') || 'agent',
+        avatar: authUser?.photoURL || agentProfile?.avatar || 'https://github.com/shadcn.png'
       };
 
       await updateDoc(convoRef, {
         status: 'active',
         humanInvolved: true,
-        // agent: doc(db, 'agents', 'mock-agent-id') // If we had an agents collection
+        agent: currentAgent
       });
 
       toast({
@@ -503,8 +549,30 @@ export default function ConversationDetailPage() {
             <Button variant="ghost" size="icon" className="md:hidden -ml-2" onClick={() => router.push('/desk/conversations')}>
               <ChevronLeft className="h-6 w-6" />
             </Button>
-            <Avatar>
-              <AvatarFallback>{conversation.visitorId.substring(0, 2).toUpperCase()}</AvatarFallback>
+            <Avatar className="h-10 w-10 overflow-hidden ring-1 ring-border">
+              {conversation.status === 'active' || conversation.humanInvolved ? (
+                <div className="relative h-full w-full flex">
+                  {/* Split View: Left Half Bot, Right Half Agent */}
+                  <div className="absolute left-0 top-0 bottom-0 w-1/2 bg-blue-100 flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-blue-600" />
+                  </div>
+                  <div className="absolute right-0 top-0 bottom-0 w-1/2 bg-muted flex items-center justify-center overflow-hidden">
+                    {(conversation.agent as any)?.avatar ? (
+                      <img src={(conversation.agent as any).avatar} alt="Agent" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center bg-gray-200">
+                        <User className="h-3 w-3 text-gray-500" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : conversation.status === 'ai' || conversation.status === 'pending' ? (
+                <div className="flex h-full w-full items-center justify-center bg-blue-100 text-blue-600">
+                  <Bot className="h-6 w-6" />
+                </div>
+              ) : (
+                <AvatarFallback>{conversation.visitorId.substring(0, 2).toUpperCase()}</AvatarFallback>
+              )}
             </Avatar>
             <div>
               <h2 className="font-semibold">{conversation.title || `Visitor ${conversation.visitorId.substring(0, 6)}`}</h2>
@@ -514,37 +582,45 @@ export default function ConversationDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {conversation.status === 'active' && (
+            {conversation.status === 'active' ? (
               <>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm">
-                      <XCircle className="mr-2 h-4 w-4" />
-                      End Chat
+                {(conversation.agent as any)?.id === authUser?.uid ? (
+                  <>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="destructive" size="sm">
+                          <XCircle className="mr-2 h-4 w-4" />
+                          End Chat
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>End Conversation?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to end this chat? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleEndChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            End Chat
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                    <Button variant="outline" size="sm" onClick={handleLeaveConversation}>
+                      <LogOut className="mr-2 h-4 w-4" />
+                      Leave Conversation
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>End Conversation?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Are you sure you want to end this chat? This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleEndChat} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                        End Chat
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-                <Button variant="outline" size="sm" onClick={handleLeaveConversation}>
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Leave Conversation
-                </Button>
+                  </>
+                ) : (
+                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 py-1 px-3">
+                    <UserCheck className="mr-2 h-4 w-4" />
+                    Handled by {(conversation.agent as any)?.name || 'another agent'}
+                  </Badge>
+                )}
               </>
-            )}
-            {conversation.status !== 'active' && conversation.status !== 'ended' && (
+            ) : conversation.status !== 'ended' && (
               <Button size="sm" onClick={handleJoinConversation}>
                 <UserCheck className="mr-2 h-4 w-4" />
                 Join Conversation
@@ -576,11 +652,20 @@ export default function ConversationDetailPage() {
               >
                 <Avatar className="h-8 w-8">
                   {message.role === 'agent' ? (
-                    <AvatarImage src={message.agent?.avatar} />
-                  ) : null}
-                  <AvatarFallback className={cn(message.role === 'agent' ? 'bg-primary text-primary-foreground' : 'bg-muted')}>
-                    {message.role === 'agent' ? 'A' : message.role === 'ai' ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
-                  </AvatarFallback>
+                    <>
+                      <AvatarImage
+                        src={message.agent?.avatar || (conversation.agent as any)?.avatar || 'https://github.com/shadcn.png'}
+                        alt={message.agent?.name || (conversation.agent as any)?.name}
+                      />
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        {(message.agent?.name || (conversation.agent as any)?.name || 'A').split(' ').map((n: string) => n[0]).join('')}
+                      </AvatarFallback>
+                    </>
+                  ) : (
+                    <AvatarFallback className={cn(message.role === 'ai' ? 'bg-blue-100 text-blue-600' : 'bg-muted text-muted-foreground')}>
+                      {message.role === 'ai' ? <Bot className="h-4 w-4" /> : <User className="h-4 w-4" />}
+                    </AvatarFallback>
+                  )}
                 </Avatar>
                 <div
                   className={cn(

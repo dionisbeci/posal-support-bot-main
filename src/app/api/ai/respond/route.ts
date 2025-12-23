@@ -118,11 +118,20 @@ export async function POST(request: Request) {
     }
     // END: Generate Title Logic
 
+    // Save confidence score if available
+    if (conversationId && result.confidence !== undefined) {
+      const { admin, db } = await import('@/lib/firebase-admin');
+      await db.collection('conversations').doc(conversationId).update({
+        confidenceScore: result.confidence
+      });
+    }
+
     // Send the AI's response AND the threadId back to the frontend.
     // The frontend needs the threadId to continue the conversation.
     return NextResponse.json({
       response: result.response,
-      threadId: result.threadId
+      threadId: result.threadId,
+      confidence: result.confidence
     });
 
   } catch (error: any) {
