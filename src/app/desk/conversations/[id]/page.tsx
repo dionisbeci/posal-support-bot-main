@@ -682,20 +682,22 @@ export default function ConversationDetailPage() {
                 </div>
               </div>
             ))}
-            {visitorTyping && (
-              <div className="flex items-start gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="bg-muted"><User className="h-4 w-4" /></AvatarFallback>
-                </Avatar>
-                <div className="max-w-[80%] rounded-lg p-3 text-sm bg-muted">
-                  <span className="text-xs text-muted-foreground animate-pulse">Visitor is typing...</span>
-                </div>
-              </div>
-            )}
+            {/* Visitor typing indicator removed from here */}
           </div>
         </ScrollArea>
 
-        <div className="border-t p-4 shrink-0">
+        <div className="border-t px-4 py-3 shrink-0 relative">
+          {/* Subtle Visitor Typing Indicator */}
+          {visitorTyping && (
+            <div className="absolute -top-6 left-4 flex items-center gap-2 text-xs text-muted-foreground bg-white/80 backdrop-blur-sm pr-2 rounded-t-md animate-in fade-in slide-in-from-bottom-1 z-10">
+              <div className="flex gap-1">
+                <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-1 h-1 bg-blue-500 rounded-full animate-bounce"></span>
+              </div>
+              <span className="italic font-medium">Vizitori po shkruan...</span>
+            </div>
+          )}
           <form onSubmit={handleSendMessage} className="flex gap-2">
             <Button type="button" variant="ghost" size="icon">
               <Paperclip className="h-5 w-5 text-muted-foreground" />

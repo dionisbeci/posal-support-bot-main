@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Bot, Send, User, Loader2 } from 'lucide-react';
+import { Bot, Send, User, Loader2, XCircle, ChevronDown } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { OpenAI } from 'openai';
 import ReactMarkdown from 'react-markdown';
@@ -346,16 +346,65 @@ const ChatWidget = memo(function ChatWidget() {
     }
   };
 
+  const handleEndChat = async () => {
+    if (!conversationId || conversationStatus === 'ended') return;
+
+    try {
+      await addDoc(collection(db, 'messages'), {
+        role: 'system',
+        content: 'Biseda përfundoi.',
+        conversationId,
+        timestamp: serverTimestamp()
+      });
+
+      await updateDoc(doc(db, 'conversations', conversationId), {
+        status: 'ended',
+        lastMessage: 'Biseda përfundoi.',
+        lastMessageAt: serverTimestamp()
+      });
+    } catch (error) {
+      console.error("Error ending chat:", error);
+    }
+  };
+
+  const handleStartNewChat = () => {
+    // Tell the parent window (embed.js) to clear the session and reload
+    window.parent.postMessage('reset-chat-session', '*');
+  };
+
   if (loading) return <div className="flex h-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   if (error) return <div className="flex h-full items-center justify-center p-4 text-center text-red-700">{error}</div>;
 
   return (
-    <div className="flex h-screen flex-col bg-background font-body">
-      <header className="flex items-center gap-4 border-b p-4 shadow-sm">
-        <Avatar><AvatarFallback className="bg-primary text-primary-foreground"><Bot className="h-6 w-6" /></AvatarFallback></Avatar>
-        <div>
-          <p className="font-semibold">Posal Chat</p>
-          <p className="text-sm text-muted-foreground">Jemi këtu për t'ju ndihmuar</p>
+    <div className="flex h-screen flex-col bg-background font-body overflow-hidden">
+      <header className="flex items-center justify-between border-b p-4 shadow-sm bg-white z-10">
+        <div className="flex items-center gap-3">
+          <Avatar className="h-10 w-10 ring-2 ring-primary/10">
+            <AvatarFallback className="bg-primary text-primary-foreground">
+              <Bot className="h-6 w-6" />
+            </AvatarFallback>
+          </Avatar>
+          <div>
+            <p className="font-bold text-slate-900 leading-tight">Posal Chat</p>
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
+              Jemi këtu për t'ju ndihmuar
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          {conversationStatus !== 'ended' && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2 text-xs font-semibold"
+              onClick={handleEndChat}
+              title="End Conversation"
+            >
+              <XCircle className="h-4 w-4 mr-1" />
+              Mbyll chat
+            </Button>
+          )}
         </div>
       </header>
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
@@ -381,48 +430,65 @@ const ChatWidget = memo(function ChatWidget() {
             </div>
           ))}
 
-          {/* Typing Indicator */}
-          {(isSending || agentTyping) && (
-            <div className="flex items-end gap-3">
+          {/* AI Loading State only */}
+          {isSending && !agentTyping && (
+            <div className="flex items-end gap-3 pb-2">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className='bg-primary/20 text-primary'>
                   <Bot className="h-5 w-5" />
                 </AvatarFallback>
               </Avatar>
               <div className="max-w-[75%] rounded-lg p-3 text-sm bg-card text-card-foreground border rounded-bl-none">
-                {agentTyping ? (
-                  <span className="text-xs text-muted-foreground animate-pulse">Agjenti po shkruan...</span>
-                ) : (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                )}
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
               </div>
             </div>
           )}
         </div>
       </ScrollArea>
-      <div className="border-t bg-background p-4">
-        {conversationStatus === 'ended' ? (
-          <div className="flex items-center justify-center p-3 bg-red-50 text-red-600 rounded-md text-sm font-medium border border-red-100">
-            Biseda përfundoi
+      <div className="border-t bg-background px-4 py-3 relative">
+        {/* Subtle Typing Indicator Overlay */}
+        {agentTyping && (
+          <div className="absolute -top-6 left-4 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm pr-2 rounded-t-md animate-in fade-in slide-in-from-bottom-1">
+            <div className="flex gap-1">
+              <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+              <span className="w-1 h-1 bg-primary rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+              <span className="w-1 h-1 bg-primary rounded-full animate-bounce"></span>
+            </div>
+            <span>Agjenti po shkruan...</span>
           </div>
-        ) : (
-          <form onSubmit={handleSendMessage} className="relative">
-            <Textarea
-              placeholder="Shkruani mesazhin tuaj..."
-              value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                handleTyping();
-              }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
-              className="pr-12"
-              disabled={isSending}
-            />
-            <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
-              <Send className="h-5 w-5 text-primary" />
-            </Button>
-          </form>
         )}
+        <div className="flex flex-col">
+          {conversationStatus === 'ended' ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-center p-3 bg-slate-50 text-slate-500 rounded-md text-sm font-medium border border-slate-100 italic">
+                Biseda përfundoi
+              </div>
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold"
+                onClick={handleStartNewChat}
+              >
+                Filloni një bisedë të re
+              </Button>
+            </div>
+          ) : (
+            <form onSubmit={handleSendMessage} className="relative">
+              <Textarea
+                placeholder="Shkruani mesazhin tuaj..."
+                value={input}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                  handleTyping();
+                }}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(e); } }}
+                className="pr-12"
+                disabled={isSending}
+              />
+              <Button type="submit" variant="ghost" size="icon" className="absolute right-2 top-1/2 -translate-y-1/2" disabled={isSending || !input.trim()}>
+                <Send className="h-5 w-5 text-primary" />
+              </Button>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   );
