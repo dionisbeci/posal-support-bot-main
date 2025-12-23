@@ -54,19 +54,32 @@ export default function ConversationsLayout({
   }, []);
 
   const alertedIds = useRef<Set<string>>(new Set());
+  const handoffAlertedIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (!isClient) return;
     conversations.forEach(convo => {
-      // Only alert for AI/Pending/Active chats that are handled by AI (status ai or pending usually)
-      if (convo.status !== 'ended' && convo.status !== 'archived' && convo.confidenceScore !== undefined && convo.confidenceScore < 20) {
+      // 1. Confidence Alert (Critical < 20%)
+      if (convo.status !== 'ended' && convo.status !== 'archived' && (convo.confidenceScore ?? 100) < 20) {
         if (!alertedIds.current.has(convo.id)) {
           const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
           audio.play().catch(e => console.log('Audio play failed:', e));
           alertedIds.current.add(convo.id);
         }
-      } else if (convo.confidenceScore === undefined || convo.confidenceScore >= 20 || convo.status === 'ended') {
+      } else {
         alertedIds.current.delete(convo.id);
+      }
+
+      // 2. Handoff Request Alert (Status becomes pending)
+      if (convo.status === 'pending') {
+        if (!handoffAlertedIds.current.has(convo.id)) {
+          // Play a distinct doorbell/chime sound for new handoff requests
+          const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/1110/1110-preview.mp3');
+          audio.play().catch(e => console.log('Handoff Audio play failed:', e));
+          handoffAlertedIds.current.add(convo.id);
+        }
+      } else {
+        handoffAlertedIds.current.delete(convo.id);
       }
     });
   }, [conversations, isClient]);
@@ -432,8 +445,8 @@ export default function ConversationsLayout({
                     className={cn(
                       "cursor-pointer border-transparent",
                       statusFilter === 'ended'
-                        ? "bg-red-500 text-white hover:bg-red-600"
-                        : "bg-red-500/10 text-red-700 hover:bg-red-500/20 hover:text-red-800"
+                        ? "bg-gray-500 text-white hover:bg-gray-600"
+                        : "bg-gray-500/10 text-gray-700 hover:bg-gray-500/20 hover:text-gray-800"
                     )}
                     onClick={() => setStatusFilter('ended')}
                   >
@@ -515,7 +528,7 @@ export default function ConversationsLayout({
                             </div>
                             <div className="flex items-center gap-2 mt-1">
                               {convo.status === 'ended' ? (
-                                <Badge variant="destructive" className="h-5 px-1.5 text-[10px] uppercase font-bold">
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold bg-gray-200 text-gray-700 border-transparent">
                                   Chat Ended
                                 </Badge>
                               ) : convo.status === 'active' ? (
