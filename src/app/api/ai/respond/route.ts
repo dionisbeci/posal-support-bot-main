@@ -67,7 +67,7 @@ export async function POST(request: Request) {
     }
 
     // Check for "unsure" response to trigger handoff
-    const handoffPhrase = "Të them të drejtën, kërkova nëpër letra por nuk gjeta ndonjë gjë fiks për këtë që po kërkon. Dëshiron të të lidh këtu në chat me çunat dhe gocat e suportit?";
+    const handoffPhrase = "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?";
 
     if (result.response.includes(handoffPhrase)) {
       // Handoff logic: Update conversation to 'handoffConfirmationPending'
