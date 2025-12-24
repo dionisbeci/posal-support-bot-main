@@ -125,14 +125,16 @@
         // transform: rotate(90deg); // Removed rotate for the < icon
       }
 
-      @media (max-width: 450px) {
+      @media (max-width: 768px) {
         #posal-chat-widget-container {
-          width: 100vw;
-          height: 100vh;
-          max-height: 100vh;
-          bottom: 0;
-          right: 0;
-          border-radius: 0;
+          width: 100% !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          top: 0 !important;
+          left: 0 !important;
+          bottom: 0 !important;
+          right: 0 !important;
+          border-radius: 0 !important;
           transform: translateY(100%);
         }
         #posal-chat-widget-container.is-open {
@@ -141,6 +143,9 @@
         #posal-chat-toggle-button {
           bottom: 15px;
           right: 15px;
+        }
+        #posal-chat-toggle-button.is-open {
+          display: none;
         }
       }
     `;

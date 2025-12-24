@@ -36,7 +36,8 @@ async function checkLatestChat() {
 
     } catch (error) {
         console.error("Error:", error);
-        require('fs').writeFileSync('results.json', JSON.stringify({ error: error.message }));
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        require('fs').writeFileSync('results.json', JSON.stringify({ error: errorMessage }));
     }
 }
 

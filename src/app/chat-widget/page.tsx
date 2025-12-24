@@ -288,6 +288,10 @@ const ChatWidget = memo(function ChatWidget() {
     }
   };
 
+  const handleMinimize = () => {
+    window.parent.postMessage('close-chat-widget', '*');
+  };
+
   const handleStartNewChat = () => {
     // Tell the parent window (embed.js) to clear the session and reload
     window.parent.postMessage('reset-chat-session', '*');
@@ -297,38 +301,47 @@ const ChatWidget = memo(function ChatWidget() {
   if (error) return <div className="flex h-full items-center justify-center p-4 text-center text-red-700">{error}</div>;
 
   return (
-    <div className="flex h-screen flex-col bg-background font-body overflow-hidden">
-      <header className="flex items-center justify-between border-b p-4 shadow-sm bg-white z-10">
-        <div className="flex items-center gap-3">
-          <Avatar className="h-10 w-10 ring-2 ring-primary/10">
+    <div className="flex flex-col bg-background font-body overflow-hidden h-screen h-[100dvh]">
+      <header className="flex items-center justify-between border-b p-3 md:p-6 shadow-sm bg-white z-10 shrink-0">
+        <div className="flex items-center gap-2 md:gap-4">
+          <Avatar className="h-8 w-8 md:h-16 md:w-16 ring-2 ring-primary/10">
             <AvatarFallback className="bg-primary text-primary-foreground">
-              <Bot className="h-6 w-6" />
+              <Bot className="h-5 w-5 md:h-10 md:w-10" />
             </AvatarFallback>
           </Avatar>
           <div>
-            <p className="font-bold text-slate-900 leading-tight">Posal Chat</p>
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <p className="font-bold text-slate-900 leading-tight text-sm md:text-3xl">Posal Chat</p>
+            <p className="text-[10px] md:text-lg text-muted-foreground flex items-center gap-1">
               <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse"></span>
               Jemi këtu për t'ju ndihmuar
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 md:gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 md:h-12 md:w-12 text-muted-foreground hover:text-primary"
+            onClick={handleMinimize}
+            title="Minimize"
+          >
+            <ChevronDown className="h-5 w-5 md:h-8 md:w-8" />
+          </Button>
           {conversationStatus !== 'ended' && (
             <Button
               variant="ghost"
               size="sm"
-              className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 px-2 text-xs font-semibold"
+              className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 md:h-12 px-2 md:px-4 text-[10px] md:text-base font-semibold"
               onClick={handleEndChat}
               title="End Conversation"
             >
-              <XCircle className="h-4 w-4 mr-1" />
-              Mbyll chat
+              <XCircle className="h-3 w-3 md:h-6 md:w-6 mr-1 md:mr-2" />
+              <span className="hidden xs:inline">Mbyll chat</span>
             </Button>
           )}
         </div>
       </header>
-      <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
+      <ScrollArea className="flex-1 p-3 md:p-4" ref={scrollAreaRef}>
         <div className="space-y-6">
           {messages.map((message) => (
             <div key={message.id} className={cn('flex items-end gap-3', message.role === 'user' && 'flex-row-reverse')}>
@@ -366,7 +379,7 @@ const ChatWidget = memo(function ChatWidget() {
           )}
         </div>
       </ScrollArea>
-      <div className="border-t bg-background px-4 py-3 relative">
+      <div className="border-t bg-background px-3 py-2 md:px-4 md:py-3 relative shrink-0">
         {/* Subtle Typing Indicator Overlay */}
         {agentTyping && (
           <div className="absolute -top-6 left-4 flex items-center gap-2 text-xs text-muted-foreground bg-background/80 backdrop-blur-sm pr-2 rounded-t-md animate-in fade-in slide-in-from-bottom-1">
