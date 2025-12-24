@@ -409,8 +409,10 @@ const ChatWidget = memo(function ChatWidget() {
                   // If we set to 'ai', bot takes over.
                   // Let's set to 'active' (meaning "In Progress")
                   await updateDoc(doc(db, 'conversations', conversationId), {
-                    status: 'active', // Or 'ai' if we want to default to bot
-                    lastMessageAt: serverTimestamp() // Refresh timer
+                    status: 'ai', // Default to AI mode as requested
+                    lastMessageAt: serverTimestamp(),
+                    agent: null, // Clear assigned agent
+                    humanInvolved: false // Reset human flag
                   });
                 }}
               >

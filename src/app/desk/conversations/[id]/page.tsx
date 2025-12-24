@@ -672,23 +672,22 @@ export default function ConversationDetailPage() {
             </Button>
 
           </form>
-          {conversation.status === 'ended' && (
-            <div className="mt-2 flex items-center justify-center p-2 bg-destructive/10 text-destructive rounded-md text-sm font-medium">
-              Conversation Ended
-            </div>
-          )}
-          {conversation.status === 'inactive' && (
+          {(conversation.status === 'inactive' || conversation.status === 'ended') && (
             <div className="mt-2 flex flex-col items-center gap-2">
-              <div className="flex items-center justify-center p-2 bg-yellow-50 text-yellow-700 rounded-md text-sm font-medium w-full border border-yellow-200">
-                Conversation is inactive
+              <div className={cn("flex items-center justify-center p-2 rounded-md text-sm font-medium w-full border",
+                conversation.status === 'ended' ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-yellow-50 text-yellow-700 border-yellow-200"
+              )}>
+                {conversation.status === 'ended' ? 'Conversation Ended' : 'Conversation is inactive'}
               </div>
               <Button
                 className="w-full"
                 variant="outline"
                 onClick={async () => {
                   await updateDoc(doc(db, 'conversations', id), {
-                    status: 'active',
-                    lastMessageAt: serverTimestamp()
+                    status: 'ai', // Reset to AI mode
+                    lastMessageAt: serverTimestamp(),
+                    agent: null,
+                    humanInvolved: false
                   });
                   toast({ title: 'Conversation Reactivated' });
                 }}
