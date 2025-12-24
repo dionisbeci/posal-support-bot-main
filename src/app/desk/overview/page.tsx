@@ -99,28 +99,93 @@ export default function OverviewPage() {
         );
 
         const snapshot = await getDocs(q);
-        const docs = snapshot.docs.map(d => d.data());
+        const docs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as any));
 
-        // 3. AI Handoff Rate (Pending + Active / Total from sample)
-        // We calculate rates based on the fetched sample (up to 500)
+        // 3. AI Handoff Rate (Any chat that had human involvement / Total)
         const sampleTotal = docs.length;
-        const humanInvolved = docs.filter(d => d.status === 'active' || d.status === 'pending').length;
-        const handoffRate = sampleTotal > 0 ? Math.round((humanInvolved / sampleTotal) * 100) : 0;
+        const humanInvolvedCount = docs.filter(d => d.humanInvolved || d.status === 'active' || d.status === 'pending').length;
+        const handoffRate = sampleTotal > 0 ? Math.round((humanInvolvedCount / sampleTotal) * 100) : 0;
 
-        // 4. Active Agents
-        const agents = new Set(docs.map(d => d.agent?.id).filter(Boolean));
-        const activeAgents = agents.size;
+        // 4. Active Agents (Unique agents who handled chats in this period)
+        const agentIds = new Set();
+        docs.forEach(d => {
+          if (d.agent) {
+            // Handle both DocumentReference and plain object
+            const id = typeof d.agent === 'object' && 'id' in d.agent ? d.agent.id : d.agent;
+            if (id) agentIds.add(id);
+          }
+        });
+        const activeAgentsCount = agentIds.size;
+
+        // 6. Response Time Calculation (Estimated)
+        let totalResponseTime = 0;
+        let responseCount = 0;
+
+        if (docs.length > 0) {
+          try {
+            // We take a sample of 20 most recent conversations to calculate response time
+            // to avoid hitting read limits if there are thousands of messages
+            const sampleDocs = docs.slice(-20);
+            const chunkedIds = [];
+            for (let i = 0; i < sampleDocs.length; i += 30) {
+              chunkedIds.push(sampleDocs.slice(i, i + 30).map(d => d.id));
+            }
+
+            const allMessages: any[] = [];
+            await Promise.all(chunkedIds.map(async (chunk) => {
+              const mq = query(collection(db, 'messages'), where('conversationId', 'in', chunk));
+              const mSnap = await getDocs(mq);
+              allMessages.push(...mSnap.docs.map(m => ({ ...m.data(), id: m.id } as any)));
+            }));
+
+            const msgMap = new Map();
+            allMessages.forEach(m => {
+              if (!msgMap.has(m.conversationId)) msgMap.set(m.conversationId, []);
+              msgMap.get(m.conversationId).push(m);
+            });
+
+            msgMap.forEach((msgs) => {
+              // Sort messages by timestamp in memory
+              msgs.sort((a: any, b: any) => {
+                const tA = a.timestamp instanceof Timestamp ? a.timestamp.toDate().getTime() : new Date(a.timestamp).getTime();
+                const tB = b.timestamp instanceof Timestamp ? b.timestamp.toDate().getTime() : new Date(b.timestamp).getTime();
+                return tA - tB;
+              });
+
+              for (let i = 0; i < msgs.length - 1; i++) {
+                const current = msgs[i];
+                const next = msgs[i + 1];
+                if (current.role === 'user' && (next.role === 'ai' || next.role === 'agent')) {
+                  const start = current.timestamp instanceof Timestamp ? current.timestamp.toDate().getTime() : new Date(current.timestamp).getTime();
+                  const end = next.timestamp instanceof Timestamp ? next.timestamp.toDate().getTime() : new Date(next.timestamp).getTime();
+                  const diff = (end - start) / 1000;
+                  if (diff > 0 && diff < 3600) {
+                    totalResponseTime += diff;
+                    responseCount++;
+                  }
+                }
+              }
+            });
+          } catch (e) {
+            console.error("Error calculating response time:", e);
+          }
+        }
+
+        const avgResponseTimeSeconds = responseCount > 0 ? Math.round(totalResponseTime / responseCount) : null;
+        const responseTimeStr = avgResponseTimeSeconds
+          ? (avgResponseTimeSeconds < 60 ? `${avgResponseTimeSeconds}s` : `${Math.round(avgResponseTimeSeconds / 60)}m ${avgResponseTimeSeconds % 60}s`)
+          : 'N/A';
 
         setStats([
           {
             title: 'Total Conversations (7d)',
             value: total.toString(),
-            change: '', // We'd need previous period data for this
+            change: '',
             icon: MessageSquare,
           },
           {
             title: 'Avg. Response Time',
-            value: 'N/A',
+            value: responseTimeStr,
             change: '',
             icon: Clock,
           },
@@ -132,14 +197,13 @@ export default function OverviewPage() {
           },
           {
             title: 'Active Agents',
-            value: activeAgents.toString(),
+            value: activeAgentsCount.toString(),
             change: '',
             icon: Users,
           },
         ]);
 
         // 5. Chart Data
-        // Group by day
         const days = [];
         for (let i = 0; i < 7; i++) {
           days.push(subDays(new Date(), i));
@@ -152,11 +216,13 @@ export default function OverviewPage() {
             return isSameDay(date, day);
           });
 
-          const aiCount = dayDocs.filter(d => d.status === 'ai').length;
-          const humanCount = dayDocs.filter(d => d.status === 'active' || d.status === 'pending').length;
+          // A chat is AI handled if it ended without human intervention
+          // A chat is Human handled if humanInvolved is true OR it's currently with a human
+          const humanCount = dayDocs.filter(d => d.humanInvolved || d.status === 'active' || d.status === 'pending').length;
+          const aiCount = dayDocs.length - humanCount;
 
           return {
-            date: format(day, 'EEE'), // Mon, Tue...
+            date: format(day, 'EEE'),
             total: dayDocs.length,
             ai: aiCount,
             human: humanCount
