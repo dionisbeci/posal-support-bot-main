@@ -214,6 +214,26 @@ export default function ConversationsLayout({
     } else {
       return convo.status === 'archived';
     }
+  }).sort((a, b) => {
+    // 1. Prioritize chats that need human help (Low Confidence)
+    // Only for non-ended/non-archived chats
+    const aIsLowConf = a.status !== 'ended' && a.status !== 'archived' && (a.confidenceScore ?? 100) < 50;
+    const bIsLowConf = b.status !== 'ended' && b.status !== 'archived' && (b.confidenceScore ?? 100) < 50;
+
+    if (aIsLowConf && !bIsLowConf) return -1;
+    if (!aIsLowConf && bIsLowConf) return 1;
+
+    // 2. If both are low confidence, sort by lower confidence first
+    if (aIsLowConf && bIsLowConf) {
+      if ((a.confidenceScore ?? 100) !== (b.confidenceScore ?? 100)) {
+        return (a.confidenceScore ?? 100) - (b.confidenceScore ?? 100);
+      }
+    }
+
+    // 3. Fallback to newest message first
+    const aTime = a.lastMessageAt instanceof Date ? a.lastMessageAt.getTime() : 0;
+    const bTime = b.lastMessageAt instanceof Date ? b.lastMessageAt.getTime() : 0;
+    return bTime - aTime;
   });
 
   const handleSelectAll = () => {

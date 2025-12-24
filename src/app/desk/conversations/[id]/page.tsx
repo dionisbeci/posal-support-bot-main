@@ -123,74 +123,72 @@ export default function ConversationDetailPage() {
     };
   }, [id]);
 
-  /* Auto-Analysis Disabled for Debugging
-    // Automatic Analysis Hook
-    useEffect(() => {
-      // Requirements:
-      // 1. Conversation loaded
-      // 2. Messages loaded (> 3 messages for context)
-      // 3. Not currently analyzing
-      if (!conversation || loading || messages.length < 3) return;
-  
-      const checkAndRunAnalysis = async () => {
-        // 4. Debounce / Staleness Check
-        const now = new Date();
-        let lastAnalyzedTime = new Date(0); // Default to epoch if never analyzed
-  
-        if (conversation.lastAnalyzedAt) {
-          lastAnalyzedTime = conversation.lastAnalyzedAt instanceof Timestamp
-            ? conversation.lastAnalyzedAt.toDate()
-            : (conversation.lastAnalyzedAt instanceof Date ? conversation.lastAnalyzedAt : new Date(conversation.lastAnalyzedAt));
-        }
-  
-        const lastMessageTime = conversation.lastMessageAt instanceof Timestamp
-          ? conversation.lastMessageAt.toDate()
-          : (conversation.lastMessageAt instanceof Date ? conversation.lastMessageAt : new Date());
-  
-        // If analyzed AFTER the last message, no need to re-analyze
-        if (lastAnalyzedTime.getTime() > lastMessageTime.getTime()) {
-          return;
-        }
-  
-        // If analyzed recently (within last 2 minutes), skip to prevent spam
-        if (now.getTime() - lastAnalyzedTime.getTime() < 2 * 60 * 1000) {
-          return;
-        }
-  
-        // Trigger Analysis
-        console.log('Triggering automatic conversation analysis...');
-        try {
-          // Re-use existing handleAnalyze logic but without UI loading state conflict if possible,
-          // or just call the server action directly.
-          // Let's call server action directly to avoid messing with 'isAnalyzing' which controls the button spinner.
-          // Actually, showing the spinner might be nice feedback? Let's use clean logic separate from button.
-  
-          const conversationHistory = messages
-            .map((m) => `${m.role}: ${m.content}`)
-            .join('\n');
-  
-          const result = await analyzeConversation({ conversationHistory });
-  
-          await updateDoc(doc(db, 'conversations', id), {
-            tone: result.tone,
-            anger: result.anger,
-            frustration: result.frustration,
-            lastAnalyzedAt: serverTimestamp() // Mark as analyzed
-          });
-  
-          // Optional: Toast or silent update? Silent is better for auto-features usually.
-          // toast({ title: 'Analysis Updated' }); 
-  
-        } catch (error) {
-          console.error("Auto-analysis error:", error);
-        }
-      };
-  
-      const timeoutId = setTimeout(checkAndRunAnalysis, 2000); // 2s delay after load to settle
-      return () => clearTimeout(timeoutId);
-  
-    }, [conversation, messages, loading, id]);
-    */
+  // Automatic Analysis Hook
+  useEffect(() => {
+    // Requirements:
+    // 1. Conversation loaded
+    // 2. Messages loaded (> 3 messages for context)
+    // 3. Not currently analyzing
+    if (!conversation || loading || messages.length < 3) return;
+
+    const checkAndRunAnalysis = async () => {
+      // 4. Debounce / Staleness Check
+      const now = new Date();
+      let lastAnalyzedTime = new Date(0); // Default to epoch if never analyzed
+
+      if (conversation.lastAnalyzedAt) {
+        lastAnalyzedTime = conversation.lastAnalyzedAt instanceof Timestamp
+          ? conversation.lastAnalyzedAt.toDate()
+          : (conversation.lastAnalyzedAt instanceof Date ? conversation.lastAnalyzedAt : new Date(conversation.lastAnalyzedAt));
+      }
+
+      const lastMessageTime = conversation.lastMessageAt instanceof Timestamp
+        ? conversation.lastMessageAt.toDate()
+        : (conversation.lastMessageAt instanceof Date ? conversation.lastMessageAt : new Date());
+
+      // If analyzed AFTER the last message, no need to re-analyze
+      if (lastAnalyzedTime.getTime() > lastMessageTime.getTime()) {
+        return;
+      }
+
+      // If analyzed recently (within last 2 minutes), skip to prevent spam
+      if (now.getTime() - lastAnalyzedTime.getTime() < 2 * 60 * 1000) {
+        return;
+      }
+
+      // Trigger Analysis
+      console.log('Triggering automatic conversation analysis...');
+      try {
+        // Re-use existing handleAnalyze logic but without UI loading state conflict if possible,
+        // or just call the server action directly.
+        // Let's call server action directly to avoid messing with 'isAnalyzing' which controls the button spinner.
+        // Actually, showing the spinner might be nice feedback? Let's use clean logic separate from button.
+
+        const conversationHistory = messages
+          .map((m) => `${m.role}: ${m.content}`)
+          .join('\n');
+
+        const result = await analyzeConversation({ conversationHistory });
+
+        await updateDoc(doc(db, 'conversations', id), {
+          tone: result.tone,
+          anger: result.anger,
+          frustration: result.frustration,
+          lastAnalyzedAt: serverTimestamp() // Mark as analyzed
+        });
+
+        // Optional: Toast or silent update? Silent is better for auto-features usually.
+        // toast({ title: 'Analysis Updated' }); 
+
+      } catch (error) {
+        console.error("Auto-analysis error:", error);
+      }
+    };
+
+    const timeoutId = setTimeout(checkAndRunAnalysis, 2000); // 2s delay after load to settle
+    return () => clearTimeout(timeoutId);
+
+  }, [conversation, messages, loading, id]);
 
   // Keep refs updated for interval
   const conversationRef = useRef(conversation);
