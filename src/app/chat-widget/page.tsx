@@ -137,6 +137,19 @@ const ChatWidget = memo(function ChatWidget() {
         // Update ref for other logic if needed
         conversationDataRef.current = { ...data, id: snap.id };
 
+        // Check if agent is typing
+        if (data.typing && data.typing.agent) {
+          const lastUpdate = data.typing.lastUpdate instanceof Timestamp ? data.typing.lastUpdate.toDate() : new Date();
+          const now = new Date();
+          if (now.getTime() - lastUpdate.getTime() < 5000) {
+            setAgentTyping(true);
+          } else {
+            setAgentTyping(false);
+          }
+        } else {
+          setAgentTyping(false);
+        }
+
         // Debug Log for State Change
         if (data.status === 'ended') {
           console.log("[ChatWidget] DETECTED STATUS ENDED FROM SNAPSHOT!", new Date().toISOString());
