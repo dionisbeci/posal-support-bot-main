@@ -23,13 +23,13 @@ export async function generateTitle(input: GenerateTitleInput): Promise<Generate
                 {
                     role: 'system',
                     content: `You are an AI assistant helping to label support conversations.
-          Generate a short, descriptive title (3-6 words) for this conversation based on the user's issue or main topic.
+          Generate a short, descriptive title (3-6 words) in Albanian for this conversation based on the user's issue or main topic.
           If there is not enough context to determine a specific topic (e.g. just greetings like "Hi", "Hello", or unclear messages), return an empty string.
           Do not include quotes in the output.
           Examples:
-          - "Login Issue on Mobile"
-          - "Refund Request for Order #123"
-          - "" (for "Hello")`
+          - "Probleme me llogarinë"
+          - "Kërkesë për rimbursim"
+          - ""`
                 },
                 {
                     role: 'user',
