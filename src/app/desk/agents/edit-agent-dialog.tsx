@@ -28,6 +28,9 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { storage } from '@/lib/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { ImagePlus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Agent } from '@/lib/types';
@@ -36,7 +39,7 @@ const editAgentSchema = z.object({
     name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
     email: z.string().email({ message: 'Please enter a valid email.' }),
     role: z.enum(['admin', 'agent']),
-    avatar: z.string().url({ message: 'Please enter a valid URL.' }).optional(),
+    avatar: z.string().url({ message: 'Please enter a valid URL.' }).or(z.literal('')).optional(),
 });
 
 type EditAgentFormValues = z.infer<typeof editAgentSchema>;
@@ -50,6 +53,7 @@ interface EditAgentDialogProps {
 
 export function EditAgentDialog({ agent, open, onOpenChange, onSuccess }: EditAgentDialogProps) {
     const { toast } = useToast();
+    const [uploading, setUploading] = useState(false);
 
     const form = useForm<EditAgentFormValues>({
         resolver: zodResolver(editAgentSchema),
@@ -60,6 +64,35 @@ export function EditAgentDialog({ agent, open, onOpenChange, onSuccess }: EditAg
             avatar: '',
         },
     });
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            toast({ title: 'Invalid file', description: 'Please upload an image file.', variant: 'destructive' });
+            return;
+        }
+
+        if (file.size > 2 * 1024 * 1024) {
+            toast({ title: 'File too large', description: 'Image must be under 2MB.', variant: 'destructive' });
+            return;
+        }
+
+        setUploading(true);
+        try {
+            const storageRef = ref(storage, `avatars/${Date.now()}_${file.name}`);
+            await uploadBytes(storageRef, file);
+            const url = await getDownloadURL(storageRef);
+            form.setValue('avatar', url);
+            toast({ title: 'Success', description: 'Image uploaded successfully.' });
+        } catch (error: any) {
+            console.error("Upload error:", error);
+            toast({ title: 'Error', description: 'Failed to upload image.', variant: 'destructive' });
+        } finally {
+            setUploading(false);
+        }
+    };
 
     useEffect(() => {
         if (agent) {
@@ -179,23 +212,71 @@ export function EditAgentDialog({ agent, open, onOpenChange, onSuccess }: EditAg
                                 </FormItem>
                             )}
                         />
-                        <FormField
-                            control={form.control}
-                            name="avatar"
-                            render={({ field }) => (
-                                <FormItem>
-                                    <FormLabel>Avatar URL</FormLabel>
-                                    <FormControl>
-                                        <Input
-                                            placeholder="https://example.com/avatar.jpg"
-                                            {...field}
-                                        />
-                                    </FormControl>
-                                    <FormMessage />
-                                </FormItem>
+                        <div className="space-y-3">
+                            <FormLabel>Avatar (URL or Upload)</FormLabel>
+                            <div className="flex gap-2">
+                                <FormField
+                                    control={form.control}
+                                    name="avatar"
+                                    render={({ field }) => (
+                                        <FormItem className="flex-1">
+                                            <FormControl>
+                                                <Input
+                                                    placeholder="https://example.com/avatar.jpg"
+                                                    {...field}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <div className="relative">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        className="hidden"
+                                        id="edit-avatar-upload"
+                                        onChange={handleImageUpload}
+                                        disabled={uploading}
+                                    />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        asChild
+                                        className={uploading ? "opacity-50 pointer-events-none" : "cursor-pointer"}
+                                    >
+                                        <label htmlFor="edit-avatar-upload">
+                                            {uploading ? (
+                                                <Loader2 className="h-4 w-4 animate-spin" />
+                                            ) : (
+                                                <ImagePlus className="h-4 w-4" />
+                                            )}
+                                        </label>
+                                    </Button>
+                                </div>
+                            </div>
+                            {form.watch('avatar') && (
+                                <div className="mt-2 flex items-center gap-2">
+                                    <img
+                                        src={form.watch('avatar')}
+                                        alt="Preview"
+                                        className="h-10 w-10 rounded-full object-cover border"
+                                    />
+                                    <span className="text-xs text-muted-foreground truncate max-w-[200px]">Avatar Preview</span>
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => form.setValue('avatar', '')}
+                                        className="h-6 px-2 text-red-500 hover:text-red-600"
+                                    >
+                                        Remove
+                                    </Button>
+                                </div>
                             )}
-                        />
-                        <div className="flex justify-end gap-3">
+                        </div>
+                        <div className="flex justify-end gap-3 pt-4">
                             <Button
                                 type="button"
                                 variant="outline"
@@ -203,7 +284,9 @@ export function EditAgentDialog({ agent, open, onOpenChange, onSuccess }: EditAg
                             >
                                 Cancel
                             </Button>
-                            <Button type="submit">Save Changes</Button>
+                            <Button type="submit" disabled={uploading}>
+                                {uploading ? "Saving..." : "Save Changes"}
+                            </Button>
                         </div>
                     </form>
                 </Form>

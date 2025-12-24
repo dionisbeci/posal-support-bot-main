@@ -27,7 +27,10 @@ if (typeof window !== 'undefined') {
   analytics = getAnalytics(app);
 }
 
+import { getStorage } from 'firebase/storage';
+
 const db = getFirestore(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
-export { app, db, auth, analytics };
+export { app, db, auth, storage, analytics };
