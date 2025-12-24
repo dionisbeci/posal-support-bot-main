@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, FormEvent, useRef } from 'react';
+import { useChatAutoStatus } from '@/hooks/useChatAutoStatus';
 import { useParams, useRouter } from 'next/navigation';
 import {
   doc,
@@ -122,72 +123,74 @@ export default function ConversationDetailPage() {
     };
   }, [id]);
 
-  // Automatic Analysis Hook
-  useEffect(() => {
-    // Requirements:
-    // 1. Conversation loaded
-    // 2. Messages loaded (> 3 messages for context)
-    // 3. Not currently analyzing
-    if (!conversation || loading || messages.length < 3) return;
-
-    const checkAndRunAnalysis = async () => {
-      // 4. Debounce / Staleness Check
-      const now = new Date();
-      let lastAnalyzedTime = new Date(0); // Default to epoch if never analyzed
-
-      if (conversation.lastAnalyzedAt) {
-        lastAnalyzedTime = conversation.lastAnalyzedAt instanceof Timestamp
-          ? conversation.lastAnalyzedAt.toDate()
-          : (conversation.lastAnalyzedAt instanceof Date ? conversation.lastAnalyzedAt : new Date(conversation.lastAnalyzedAt));
-      }
-
-      const lastMessageTime = conversation.lastMessageAt instanceof Timestamp
-        ? conversation.lastMessageAt.toDate()
-        : (conversation.lastMessageAt instanceof Date ? conversation.lastMessageAt : new Date());
-
-      // If analyzed AFTER the last message, no need to re-analyze
-      if (lastAnalyzedTime.getTime() > lastMessageTime.getTime()) {
-        return;
-      }
-
-      // If analyzed recently (within last 2 minutes), skip to prevent spam
-      if (now.getTime() - lastAnalyzedTime.getTime() < 2 * 60 * 1000) {
-        return;
-      }
-
-      // Trigger Analysis
-      console.log('Triggering automatic conversation analysis...');
-      try {
-        // Re-use existing handleAnalyze logic but without UI loading state conflict if possible,
-        // or just call the server action directly.
-        // Let's call server action directly to avoid messing with 'isAnalyzing' which controls the button spinner.
-        // Actually, showing the spinner might be nice feedback? Let's use clean logic separate from button.
-
-        const conversationHistory = messages
-          .map((m) => `${m.role}: ${m.content}`)
-          .join('\n');
-
-        const result = await analyzeConversation({ conversationHistory });
-
-        await updateDoc(doc(db, 'conversations', id), {
-          tone: result.tone,
-          anger: result.anger,
-          frustration: result.frustration,
-          lastAnalyzedAt: serverTimestamp() // Mark as analyzed
-        });
-
-        // Optional: Toast or silent update? Silent is better for auto-features usually.
-        // toast({ title: 'Analysis Updated' }); 
-
-      } catch (error) {
-        console.error("Auto-analysis error:", error);
-      }
-    };
-
-    const timeoutId = setTimeout(checkAndRunAnalysis, 2000); // 2s delay after load to settle
-    return () => clearTimeout(timeoutId);
-
-  }, [conversation, messages, loading, id]);
+  /* Auto-Analysis Disabled for Debugging
+    // Automatic Analysis Hook
+    useEffect(() => {
+      // Requirements:
+      // 1. Conversation loaded
+      // 2. Messages loaded (> 3 messages for context)
+      // 3. Not currently analyzing
+      if (!conversation || loading || messages.length < 3) return;
+  
+      const checkAndRunAnalysis = async () => {
+        // 4. Debounce / Staleness Check
+        const now = new Date();
+        let lastAnalyzedTime = new Date(0); // Default to epoch if never analyzed
+  
+        if (conversation.lastAnalyzedAt) {
+          lastAnalyzedTime = conversation.lastAnalyzedAt instanceof Timestamp
+            ? conversation.lastAnalyzedAt.toDate()
+            : (conversation.lastAnalyzedAt instanceof Date ? conversation.lastAnalyzedAt : new Date(conversation.lastAnalyzedAt));
+        }
+  
+        const lastMessageTime = conversation.lastMessageAt instanceof Timestamp
+          ? conversation.lastMessageAt.toDate()
+          : (conversation.lastMessageAt instanceof Date ? conversation.lastMessageAt : new Date());
+  
+        // If analyzed AFTER the last message, no need to re-analyze
+        if (lastAnalyzedTime.getTime() > lastMessageTime.getTime()) {
+          return;
+        }
+  
+        // If analyzed recently (within last 2 minutes), skip to prevent spam
+        if (now.getTime() - lastAnalyzedTime.getTime() < 2 * 60 * 1000) {
+          return;
+        }
+  
+        // Trigger Analysis
+        console.log('Triggering automatic conversation analysis...');
+        try {
+          // Re-use existing handleAnalyze logic but without UI loading state conflict if possible,
+          // or just call the server action directly.
+          // Let's call server action directly to avoid messing with 'isAnalyzing' which controls the button spinner.
+          // Actually, showing the spinner might be nice feedback? Let's use clean logic separate from button.
+  
+          const conversationHistory = messages
+            .map((m) => `${m.role}: ${m.content}`)
+            .join('\n');
+  
+          const result = await analyzeConversation({ conversationHistory });
+  
+          await updateDoc(doc(db, 'conversations', id), {
+            tone: result.tone,
+            anger: result.anger,
+            frustration: result.frustration,
+            lastAnalyzedAt: serverTimestamp() // Mark as analyzed
+          });
+  
+          // Optional: Toast or silent update? Silent is better for auto-features usually.
+          // toast({ title: 'Analysis Updated' }); 
+  
+        } catch (error) {
+          console.error("Auto-analysis error:", error);
+        }
+      };
+  
+      const timeoutId = setTimeout(checkAndRunAnalysis, 2000); // 2s delay after load to settle
+      return () => clearTimeout(timeoutId);
+  
+    }, [conversation, messages, loading, id]);
+    */
 
   // Keep refs updated for interval
   const conversationRef = useRef(conversation);
@@ -198,74 +201,20 @@ export default function ConversationDetailPage() {
     messagesRef.current = messages;
   }, [conversation, messages]);
 
-  // Auto-end chat on inactivity
-  useEffect(() => {
-    const checkInactivity = async () => {
-      const convo = conversationRef.current;
-      if (!convo || !['active', 'ai'].includes(convo.status)) return;
+  // Auto-end check centralized in hook
+  useChatAutoStatus(conversationRef.current, id);
 
-      const now = new Date();
-      let lastMessageTime: Date;
+  /* Legacy auto-end logic removed */
+  // useEffect(() => {
+  //   const checkInactivity = async () => {
+  //     const convo = conversationRef.current;
 
-      // Robust Date Parsing for lastMessageAt
-      if (convo.lastMessageAt instanceof Timestamp) {
-        lastMessageTime = convo.lastMessageAt.toDate();
-      } else if (convo.lastMessageAt instanceof Date) {
-        lastMessageTime = convo.lastMessageAt;
-      } else if (typeof convo.lastMessageAt === 'string' || typeof convo.lastMessageAt === 'number') {
-        lastMessageTime = new Date(convo.lastMessageAt);
-      } else {
-        // Fallback to messages if lastMessageAt is missing
-        const msgs = messagesRef.current;
-        if (msgs.length > 0 && msgs[0].timestamp) {
-          const lastMsg = msgs[0];
-          lastMessageTime = lastMsg.timestamp instanceof Timestamp
-            ? lastMsg.timestamp.toDate()
-            : (lastMsg.timestamp instanceof Date ? lastMsg.timestamp : new Date(lastMsg.timestamp));
-        } else {
-          // Only if absolute no data, fallback to now (prevents false positive close on load error)
-          lastMessageTime = new Date();
-        }
-      }
 
-      // Check validity of date
-      if (isNaN(lastMessageTime.getTime())) {
-        lastMessageTime = new Date();
-      }
 
-      const lastTypingTime = convo.typing?.lastUpdate instanceof Timestamp
-        ? convo.typing.lastUpdate.toDate()
-        : (convo.typing?.lastUpdate instanceof Date ? convo.typing.lastUpdate : new Date(0));
 
-      const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
 
-      if (now.getTime() - lastActivity > 3 * 60 * 1000) { // 3 minutes
-        try {
-          await addDoc(collection(db, 'messages'), {
-            role: 'system',
-            content: 'Biseda përfundoi.',
-            conversationId: id,
-            timestamp: serverTimestamp()
-          });
 
-          await updateDoc(doc(db, 'conversations', id), {
-            status: 'ended',
-            lastMessage: 'Biseda përfundoi.',
-            lastMessageAt: serverTimestamp()
-          });
-          toast({
-            title: "Chat Ended",
-            description: "The chat was ended due to inactivity.",
-          });
-        } catch (error) {
-          console.error("Error auto-ending chat:", error);
-        }
-      }
-    };
 
-    const intervalId = setInterval(checkInactivity, 10000);
-    return () => clearInterval(intervalId);
-  }, [id, toast]);
 
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
@@ -728,7 +677,27 @@ export default function ConversationDetailPage() {
               Conversation Ended
             </div>
           )}
-          {conversation.status !== 'active' && conversation.status !== 'ended' && (
+          {conversation.status === 'inactive' && (
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <div className="flex items-center justify-center p-2 bg-yellow-50 text-yellow-700 rounded-md text-sm font-medium w-full border border-yellow-200">
+                Conversation is inactive
+              </div>
+              <Button
+                className="w-full"
+                variant="outline"
+                onClick={async () => {
+                  await updateDoc(doc(db, 'conversations', id), {
+                    status: 'active',
+                    lastMessageAt: serverTimestamp()
+                  });
+                  toast({ title: 'Conversation Reactivated' });
+                }}
+              >
+                Reactivate Conversation
+              </Button>
+            </div>
+          )}
+          {conversation.status !== 'active' && conversation.status !== 'ended' && conversation.status !== 'inactive' && (
             <p className="mt-2 text-center text-xs text-muted-foreground">
               You must join the conversation to reply.
             </p>

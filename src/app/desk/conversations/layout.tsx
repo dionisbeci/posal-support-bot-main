@@ -96,9 +96,17 @@ export default function ConversationsLayout({
       const docsData = snapshot.docs.map(docSnap => {
         const data = docSnap.data() as Conversation;
         data.id = docSnap.id;
-        if (data.lastMessageAt instanceof Timestamp) {
-          data.lastMessageAt = data.lastMessageAt.toDate();
+
+        // Robustly convert lastMessageAt to Date
+        const lma = data.lastMessageAt;
+        if (lma && typeof (lma as any).toDate === 'function') {
+          data.lastMessageAt = (lma as any).toDate();
+        } else if (lma && (lma as any).seconds) {
+          data.lastMessageAt = new Date((lma as any).seconds * 1000);
+        } else if (typeof lma === 'string' || typeof lma === 'number') {
+          data.lastMessageAt = new Date(lma);
         }
+
         return data;
       });
 
@@ -151,50 +159,7 @@ export default function ConversationsLayout({
     return () => unsubscribe();
   }, [limitCount]);
 
-  // AUTOMATIC CLEANUP LOGIC (Optimized: No extra reads)
-  // Replaces GlobalChatCleanup polling
-  useEffect(() => {
-    const checkCleanup = async () => {
-      const now = Date.now();
-      const threeMinutes = 3 * 60 * 1000;
 
-      // Filter locally
-      const staleChats = conversations.filter(c =>
-        (c.status === 'active' || c.status === 'ai') &&
-        c.lastMessageAt &&
-        (now - (c.lastMessageAt instanceof Date ? c.lastMessageAt.getTime() : 0) > threeMinutes)
-      );
-
-      for (const chat of staleChats) {
-        // Double check to avoid race conditions or endless loops
-        if (chat.lastMessage === 'Biseda përfundoi.') continue;
-
-        console.log(`Auto-ending stale chat: ${chat.id}`);
-        try {
-          // 1. Update status
-          await updateDoc(doc(db, 'conversations', chat.id), {
-            status: 'ended',
-            lastMessage: 'Biseda përfundoi.',
-            lastMessageAt: serverTimestamp()
-          });
-
-          // 2. Add system message
-          await addDoc(collection(db, 'messages'), {
-            role: 'system',
-            content: 'Biseda përfundoi.',
-            conversationId: chat.id,
-            timestamp: serverTimestamp()
-          });
-        } catch (e) {
-          console.error("Cleanup error", e);
-        }
-      }
-    };
-
-    // Run check every 30 seconds
-    const interval = setInterval(checkCleanup, 30 * 1000);
-    return () => clearInterval(interval);
-  }, [conversations]); // Re-run when list updates (safe because logic is idempotent-ish via lastMessage check)
 
   const getStatusColor = (status: string) => {
     switch (status) {

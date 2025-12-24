@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, FormEvent, useRef, Suspense, useMemo, memo } from 'react';
+import { useChatAutoStatus } from '@/hooks/useChatAutoStatus';
 import { useSearchParams } from 'next/navigation';
 import {
   collection,
@@ -114,36 +115,36 @@ const ChatWidget = memo(function ChatWidget() {
     initialize();
   }, [chatId, origin, params]);
 
+  // State for hook to avoid stale closures
+  const [conversationDataForHook, setConversationDataForHook] = useState<any>(null);
+
+  // Refs for timeout logic (Defined BEFORE the effect that uses them)
+  const conversationDataRef = useRef<any>(null);
+  const messagesRef = useRef<Message[]>([]);
+
   useEffect(() => {
     if (!conversationId) return;
-
-    // Listen to conversation status and typing
     const convoRef = doc(db, 'conversations', conversationId);
-    const unsubscribeConvo = onSnapshot(convoRef, (docSnap) => {
-      // ... existing snapshot logic ...
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setConversationStatus(data.status);
-        // Update ref for timeout logic
-        conversationDataRef.current = { ...data, id: conversationId };
 
-        // Check if agent is typing
-        if (data.typing && data.typing.agent) {
-          // Check if the update is recent (e.g. within last 5 seconds)
-          const lastUpdate = data.typing.lastUpdate instanceof Timestamp ? data.typing.lastUpdate.toDate() : new Date();
-          const now = new Date();
-          if (now.getTime() - lastUpdate.getTime() < 5000) {
-            setAgentTyping(true);
-          } else {
-            setAgentTyping(false);
-          }
-        } else {
-          setAgentTyping(false);
+    // Conversation Listener
+    const unsubscribeConvo = onSnapshot(convoRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setConversationStatus(data.status);
+        // Update state for hook
+        setConversationDataForHook({ ...data, id: snap.id });
+
+        // Update ref for other logic if needed
+        conversationDataRef.current = { ...data, id: snap.id };
+
+        // Debug Log for State Change
+        if (data.status === 'ended') {
+          console.log("[ChatWidget] DETECTED STATUS ENDED FROM SNAPSHOT!", new Date().toISOString());
         }
       }
     });
-    // ... existing message listener ...
-    // ...
+
+    // Message Listener
     const q = query(
       collection(db, 'messages'),
       where('conversationId', '==', conversationId),
@@ -159,99 +160,18 @@ const ChatWidget = memo(function ChatWidget() {
       });
       setMessages(msgs.reverse());
     });
+
     return () => {
       unsubscribeConvo();
       unsubscribeMessages();
     };
-  }, [conversationId]);
+  }, [conversationId]); // Close useEffect correctly
 
-  // Refs for timeout logic
-  const conversationDataRef = useRef<any>(null);
-  const messagesRef = useRef<Message[]>([]);
+
 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
-
-  // Auto-end check on widget side (Backup if agent is offline)
-  useEffect(() => {
-    if (!conversationId || conversationStatus === 'ended') return;
-
-    const checkInactivity = async () => {
-      const convo = conversationDataRef.current;
-      if (!convo || !['active', 'ai'].includes(convo.status)) return; // Check active and ai chats
-
-      const now = new Date();
-      let lastMessageTime: Date;
-
-      // Robust Date Parsing logic (Shared with Desk)
-      if (convo.lastMessageAt && typeof convo.lastMessageAt.toDate === 'function') {
-        lastMessageTime = convo.lastMessageAt.toDate();
-      } else if (convo.lastMessageAt instanceof Date) {
-        lastMessageTime = convo.lastMessageAt;
-      } else if (typeof convo.lastMessageAt === 'string' || typeof convo.lastMessageAt === 'number') {
-        lastMessageTime = new Date(convo.lastMessageAt);
-      } else {
-        // Fallback to messages
-        const msgs = messagesRef.current;
-        // Messages are in reverse order in state (oldest first)? No, layout says `setMessages(msgs.reverse())` 
-        // Wait, layout says `setMessages(msgs.reverse())` in `onSnapshot`?
-        // In `page.tsx` (widget), `orderBy('timestamp', 'desc')`. `msgs` is High->Low.
-        // `setMessages(msgs.reverse())` makes it Low->High (Old->New) for rendering.
-        // So `messages[messages.length - 1]` is the LATEST message.
-
-        const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
-
-        if (latestMsg && latestMsg.timestamp) {
-          lastMessageTime = latestMsg.timestamp instanceof Timestamp
-            ? latestMsg.timestamp.toDate()
-            : (latestMsg.timestamp instanceof Date ? latestMsg.timestamp : new Date(latestMsg.timestamp));
-        } else {
-          lastMessageTime = new Date(); // Fallback if absolutely no info
-        }
-      }
-
-      if (isNaN(lastMessageTime.getTime())) lastMessageTime = new Date();
-
-      const lastTypingTime = convo.typing?.lastUpdate instanceof Timestamp
-        ? convo.typing.lastUpdate.toDate()
-        : convo.typing?.lastUpdate && convo.typing.lastUpdate.toDate ? convo.typing.lastUpdate.toDate() : new Date(0);
-
-      const lastActivity = Math.max(lastMessageTime.getTime(), lastTypingTime.getTime());
-
-      if (now.getTime() - lastActivity > 3 * 60 * 1000) { // 3 minutes
-        try {
-
-          // Check if last message is already "Biseda përfundoi." in the messages list
-          // This prevents infinite loops if conversation status update fails or is delayed
-          const currentMsgs = messagesRef.current;
-          const lastMsg = currentMsgs.length > 0 ? currentMsgs[currentMsgs.length - 1] : null;
-          if (lastMsg && lastMsg.content === 'Biseda përfundoi.') return;
-
-          if (convo.lastMessage === 'Biseda përfundoi.') return;
-
-          await addDoc(collection(db, 'messages'), {
-            role: 'system',
-            content: 'Biseda përfundoi.',
-            conversationId,
-            timestamp: serverTimestamp()
-          });
-
-          await updateDoc(doc(db, 'conversations', conversationId), {
-            status: 'ended',
-            lastMessage: 'Biseda përfundoi.',
-            lastMessageAt: serverTimestamp()
-          });
-        } catch (error) {
-          console.error("Widget auto-end error:", error);
-        }
-      }
-    };
-
-    const intervalId = setInterval(checkInactivity, 10000); // Check every 10s
-    return () => clearInterval(intervalId);
-  }, [conversationId, conversationStatus]);
-
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
@@ -360,7 +280,8 @@ const ChatWidget = memo(function ChatWidget() {
       await updateDoc(doc(db, 'conversations', conversationId), {
         status: 'ended',
         lastMessage: 'Biseda përfundoi.',
-        lastMessageAt: serverTimestamp()
+        lastMessageAt: serverTimestamp(),
+        endedBy: 'manual-user'
       });
     } catch (error) {
       console.error("Error ending chat:", error);
@@ -468,6 +389,32 @@ const ChatWidget = memo(function ChatWidget() {
                 onClick={handleStartNewChat}
               >
                 Filloni një bisedë të re
+              </Button>
+            </div>
+          ) : conversationStatus === 'inactive' ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center justify-center p-3 bg-slate-50 text-slate-500 rounded-md text-sm font-medium border border-slate-100 italic">
+                Biseda është joaktive
+              </div>
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-white font-semibold"
+                onClick={async () => {
+                  if (!conversationId) return;
+                  // Reactivate chat - set back to 'ai' or 'active' depending on logic.
+                  // Usually if user comes back, it goes to 'ai' or stays with agent if agent was there.
+                  // Safer to just set 'active' which implies open. Or 'ai' if we want bot.
+                  // Let's check current 'humanInvolved' flag or something? 
+                  // Or just set to 'active' generally?
+                  // If we set to 'active', it might mean human agent needed.
+                  // If we set to 'ai', bot takes over.
+                  // Let's set to 'active' (meaning "In Progress")
+                  await updateDoc(doc(db, 'conversations', conversationId), {
+                    status: 'active', // Or 'ai' if we want to default to bot
+                    lastMessageAt: serverTimestamp() // Refresh timer
+                  });
+                }}
+              >
+                Rifillo bisedën
               </Button>
             </div>
           ) : (

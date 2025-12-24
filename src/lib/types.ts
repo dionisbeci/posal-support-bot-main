@@ -6,7 +6,7 @@ export type Conversation = {
   visitorId: string;
   lastMessage: string;
   lastMessageAt: Date | Timestamp;
-  status: 'active' | 'archived' | 'ai' | 'pending' | 'ended';
+  status: 'active' | 'archived' | 'ai' | 'pending' | 'ended' | 'inactive';
   agent: Agent | DocumentReference | null;
   unreadCount: number;
   threadId?: string; // OpenAI Assistant thread ID for conversation context

@@ -17,55 +17,76 @@ export async function GET(request: Request) {
         if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         }
 
-        const threeMinutesAgo = new Date(Date.now() - 3 * 60 * 1000);
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000);
 
-        const q = query(
+        // 1. Mark 'active' or 'ai' chats as 'inactive' after 5 minutes
+        const activeToInactiveQuery = query(
             collection(db, 'conversations'),
             where('status', 'in', ['active', 'ai']),
-            where('lastMessageAt', '<', threeMinutesAgo)
+            where('lastMessageAt', '<', fiveMinutesAgo)
         );
 
-        const snapshot = await getDocs(q);
+        const inactiveSnapshot = await getDocs(activeToInactiveQuery);
+        let inactiveCount = 0;
 
-        if (snapshot.empty) {
-            return NextResponse.json({ success: true, message: 'No stale chats found.', closed: 0 });
+        const inactiveBatch = writeBatch(db);
+        inactiveSnapshot.docs.forEach(docSnap => {
+            const convoRef = doc(db, 'conversations', docSnap.id);
+            inactiveBatch.update(convoRef, {
+                status: 'inactive'
+            });
+            inactiveCount++;
+        });
+        if (inactiveCount > 0) {
+            await inactiveBatch.commit();
         }
 
-        const chunks = [];
-        const docs = snapshot.docs;
-        for (let i = 0; i < docs.length; i += 100) {
-            chunks.push(docs.slice(i, i + 100));
-        }
+        // 2. Mark ANY non-ended chats as 'ended' after 3 hours
+        // We can't use '!=' in Firestore queries efficiently with date range, so we query active/ai/inactive
+        const toEndQuery = query(
+            collection(db, 'conversations'),
+            where('status', 'in', ['active', 'ai', 'inactive']),
+            where('lastMessageAt', '<', threeHoursAgo)
+        );
 
-        let closedCount = 0;
+        const endSnapshot = await getDocs(toEndQuery);
+        let endedCount = 0;
 
-        for (const chunk of chunks) {
-            const batch = writeBatch(db);
+        if (!endSnapshot.empty) {
+            const endBatch = writeBatch(db);
             const messagesRef = collection(db, 'messages');
 
-            chunk.forEach(docSnap => {
+            endSnapshot.docs.forEach(docSnap => {
                 const convoRef = doc(db, 'conversations', docSnap.id);
+                // Check if already ended to be safe (though query handles it)
+                if (docSnap.data().status === 'ended') return;
 
-                batch.update(convoRef, {
+                endBatch.update(convoRef, {
                     status: 'ended',
                     lastMessage: 'Biseda përfundoi.',
-                    lastMessageAt: serverTimestamp()
+                    lastMessageAt: serverTimestamp(),
+                    endedBy: 'v2-cron-job'
                 });
 
                 const newMessageRef = doc(messagesRef);
-                batch.set(newMessageRef, {
+                endBatch.set(newMessageRef, {
                     role: 'system',
                     content: 'Biseda përfundoi.',
                     conversationId: docSnap.id,
                     timestamp: serverTimestamp()
                 });
-                closedCount++;
+                endedCount++;
             });
-
-            await batch.commit();
+            await endBatch.commit();
         }
 
-        return NextResponse.json({ success: true, message: `Closed ${closedCount} stale chats.`, closed: closedCount });
+        return NextResponse.json({
+            success: true,
+            message: `Processed chats. Inactive: ${inactiveCount}, Ended: ${endedCount}`,
+            inactive: inactiveCount,
+            ended: endedCount
+        });
 
     } catch (error) {
         console.error('Cron cleanup error:', error);
