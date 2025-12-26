@@ -54,11 +54,15 @@ async function useAssistantAPI(
 
       CONFIDENCE SCORE RULES:
       At the very end of your response, you MUST append a confidence score tag: [[CONFIDENCE:score]].
+      The score should be an integer between 0 and 100 representing your internal certainty about the answer provided:
+      - 95-100: You are absolutely certain and have direct documentation for this.
+      - 80-94: You are very confident but there might be slight nuances.
+      - 60-79: You are reasonably sure but there's a possibility of error or missing detail.
+      - 30-59: You are providing a "best effort" answer but are quite unsure.
+      - 20-29: You are guessing or have very little information to go on.
+      - 0-20: You are using the EXACT HANDOFF PHRASE because you cannot answer the POS.al question accurately.
       
-      - answering POS.al question correctly: [[CONFIDENCE:100]]
-      - answering POS.al question with some doubt: [[CONFIDENCE:60]]
-      - refusing an UNRELATED topic (e.g. "Who won the game?"): [[CONFIDENCE:75]] (This is a valid response, so do not give 0).
-      - using the HANDOFF PHRASE (unsure about POS question): [[CONFIDENCE:0]]
+      Refusing UNRELATED topics (sports, politics, etc.) should generally be around 80-90 confidence since it is a correct adherence to your core mission.
 
       User Message: ${input.message}`,
     });
@@ -88,11 +92,11 @@ async function useAssistantAPI(
         let confidence = 0;
 
         // Parse [[CONFIDENCE:xx]] tag
-        const confidenceMatch = response.match(/\[\[CONFIDENCE:(\d+)\]\]/);
+        const confidenceMatch = response.match(/\[\[CONFIDENCE:\s*(\d+)\s*\]\]/i);
         if (confidenceMatch) {
           confidence = parseInt(confidenceMatch[1], 10);
-          // Remove the tag from the response shown to user
-          response = response.replace(/\[\[CONFIDENCE:\d+\]\]/, '').trim();
+          // Remove all instances of the tag from the response shown to user
+          response = response.replace(/\[\[CONFIDENCE:\s*\d+\s*\]\]/gi, '').trim();
         }
 
         return { response, threadId: currentThreadId, confidence };
@@ -117,6 +121,28 @@ async function useChatCompletions(
 ): Promise<ContextAwareResponseOutput> {
   try {
     const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+
+    // Add system instruction for confidence
+    messages.push({
+      role: 'system',
+      content: `You are a helpful support agent for "POS.al". You MUST respond ONLY in Albanian.
+      
+      If you are genuinely UNSURE about a POS.al question, or if the user explicitly asks for a human agent, you MUST reply with this EXACT phrase:
+      "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?"
+
+      CONFIDENCE SCORE RULES:
+      At the very end of your response, you MUST append a confidence score tag: [[CONFIDENCE:score]].
+      The score should be an integer between 0 and 100 representing your internal certainty about the answer provided:
+      - 95-100: Very certain.
+      - 80-94: Very confident.
+      - 60-79: Reasonably sure.
+      - 30-59: Best effort but unsure.
+      - 1-29: Guessing.
+      - 0: Using the handoff phrase.
+
+      Refusing unrelated topics should be 80-90 confidence.`
+    });
+
     if (input.conversationHistory && input.conversationHistory.length > 0) {
       for (const msg of input.conversationHistory) {
         messages.push({
@@ -126,15 +152,27 @@ async function useChatCompletions(
       }
     }
     messages.push({ role: 'user', content: input.message });
+
     const completion = await openai.chat.completions.create({
       model: model,
       messages: messages,
     });
-    const response = completion.choices?.[0]?.message?.content;
+
+    let response = completion.choices?.[0]?.message?.content;
     if (!response) {
       return { response: 'Sorry, I could not generate a response.' };
     }
-    return { response, threadId: input.threadId ?? undefined, confidence: 0 };
+
+    let confidence = 0;
+    // Parse [[CONFIDENCE:xx]] tag
+    const confidenceMatch = response.match(/\[\[CONFIDENCE:\s*(\d+)\s*\]\]/i);
+    if (confidenceMatch) {
+      confidence = parseInt(confidenceMatch[1], 10);
+      // Remove all instances of the tag from the response shown to user
+      response = response.replace(/\[\[CONFIDENCE:\s*\d+\s*\]\]/gi, '').trim();
+    }
+
+    return { response, threadId: input.threadId ?? undefined, confidence };
   } catch (err: any) {
     console.error('Error in useChatCompletions:', err);
     throw err;
