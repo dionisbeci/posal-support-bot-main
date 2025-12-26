@@ -80,38 +80,47 @@ export default function OverviewPage() {
       try {
         const sevenDaysAgo = subDays(new Date(), 7);
 
-        // 1. Optimized Counts (Very cheap reads)
-        const totalCountQuery = query(
-          collection(db, 'conversations'),
-          where('lastMessageAt', '>=', sevenDaysAgo)
-        );
-        const humanInvolvedQuery = query(
-          collection(db, 'conversations'),
-          where('lastMessageAt', '>=', sevenDaysAgo),
-          where('humanInvolved', '==', true)
-        );
-
-        const [totalSnap, humanSnap] = await Promise.all([
-          getCountFromServer(totalCountQuery),
-          getCountFromServer(humanInvolvedQuery)
-        ]);
-
-        const total = totalSnap.data().count;
-        const humanInvolvedCount = humanSnap.data().count;
-        const handoffRate = total > 0 ? Math.round((humanInvolvedCount / total) * 100) : 0;
-
-        // 2. Limited Fetch for Chart & Agents (100 is enough for 7d view)
+        // 1. Single robust query (max 500 docs)
         const q = query(
           collection(db, 'conversations'),
           where('lastMessageAt', '>=', sevenDaysAgo),
           orderBy('lastMessageAt', 'desc'),
-          limit(100)
+          limit(500)
         );
 
         const snapshot = await getDocs(q);
-        const docs = snapshot.docs.map(d => ({ ...d.data(), id: d.id } as any));
+        const docs = snapshot.docs.map(d => {
+          const data = d.data() as any;
+          let date = new Date(0);
+          if (data.lastMessageAt instanceof Timestamp) {
+            date = data.lastMessageAt.toDate();
+          } else if (data.lastMessageAt?.seconds) {
+            date = new Date(data.lastMessageAt.seconds * 1000);
+          } else if (data.lastMessageAt) {
+            date = new Date(data.lastMessageAt);
+          }
+          return { ...data, id: d.id, _parsedDate: date };
+        });
 
-        // 3. Active Agents from the sample
+        const total = docs.length;
+        if (total === 0) {
+          setStats([
+            { title: 'Total Conversations (7d)', value: '0', change: '', icon: MessageSquare },
+            { title: 'Avg. Response Time', value: 'N/A', change: '', icon: Clock },
+            { title: 'AI Handoff Rate', value: '0%', change: '', icon: Bot },
+            { title: 'Active Agents', value: '0', change: '', icon: Users },
+          ]);
+          setChartData([]);
+          setLoading(false);
+          return;
+        }
+
+        const humanInvolvedCount = docs.filter(d =>
+          d.humanInvolved === true || d.status === 'active' || d.status === 'pending' || d.agent
+        ).length;
+
+        const handoffRate = Math.round((humanInvolvedCount / total) * 100);
+
         const agentIds = new Set();
         docs.forEach(d => {
           if (d.agent) {
@@ -120,13 +129,12 @@ export default function OverviewPage() {
           }
         });
 
-        // 4. Optimized Response Time (Only sample 10 chats, fetch first 15 messages each)
         let totalResponseTime = 0;
         let responseCount = 0;
+        const sampleDocs = docs.filter(d => d.humanInvolved || d.agent).slice(0, 5);
 
-        if (docs.length > 0) {
-          const sampleDocs = docs.filter(d => d.humanInvolved).slice(0, 10);
-          await Promise.all(sampleDocs.map(async (convo) => {
+        await Promise.all(sampleDocs.map(async (convo) => {
+          try {
             const mq = query(
               collection(db, 'messages'),
               where('conversationId', '==', convo.id),
@@ -135,24 +143,20 @@ export default function OverviewPage() {
             );
             const mSnap = await getDocs(mq);
             const msgs = mSnap.docs.map(m => ({ ...m.data(), id: m.id } as any));
-
-            // Find first transition User -> (AI or Agent)
             for (let i = 0; i < msgs.length - 1; i++) {
-              const current = msgs[i];
-              const next = msgs[i + 1];
-              if (current.role === 'user' && (next.role === 'ai' || next.role === 'agent')) {
-                const start = current.timestamp instanceof Timestamp ? current.timestamp.toDate().getTime() : new Date(current.timestamp).getTime();
-                const end = next.timestamp instanceof Timestamp ? next.timestamp.toDate().getTime() : new Date(next.timestamp).getTime();
-                const diff = (end - start) / 1000;
+              if (msgs[i].role === 'user' && (msgs[i + 1].role === 'ai' || msgs[i + 1].role === 'agent')) {
+                const t1 = msgs[i].timestamp instanceof Timestamp ? msgs[i].timestamp.toDate() : new Date(msgs[i].timestamp);
+                const t2 = msgs[i + 1].timestamp instanceof Timestamp ? msgs[i + 1].timestamp.toDate() : new Date(msgs[i + 1].timestamp);
+                const diff = (t2.getTime() - t1.getTime()) / 1000;
                 if (diff > 0 && diff < 3600) {
                   totalResponseTime += diff;
                   responseCount++;
-                  break; // Only take the first response per chat
+                  break;
                 }
               }
             }
-          }));
-        }
+          } catch (e) { }
+        }));
 
         const avgResponseTimeSeconds = responseCount > 0 ? Math.round(totalResponseTime / responseCount) : null;
         const responseTimeStr = avgResponseTimeSeconds
@@ -166,25 +170,16 @@ export default function OverviewPage() {
           { title: 'Active Agents', value: agentIds.size.toString(), change: '', icon: Users },
         ]);
 
-        // 5. Chart Data (Sort by date asc for chart)
-        const days = [];
-        for (let i = 0; i < 7; i++) days.push(subDays(new Date(), i));
-        days.reverse();
+        const daysList = [];
+        for (let i = 0; i < 7; i++) daysList.push(subDays(new Date(), i));
+        daysList.reverse();
 
-        const data = days.map(day => {
-          const dayDocs = docs.filter(d => {
-            const date = d.lastMessageAt instanceof Timestamp ? d.lastMessageAt.toDate() : new Date(d.lastMessageAt);
-            return isSameDay(date, day);
-          });
-          const humanCount = dayDocs.filter(d => d.humanInvolved || d.status === 'active' || d.status === 'pending').length;
-          return {
-            date: format(day, 'EEE'),
-            total: dayDocs.length,
-            ai: dayDocs.length - humanCount,
-            human: humanCount
-          };
+        const chart = daysList.map(day => {
+          const dayDocs = docs.filter(d => isSameDay(d._parsedDate, day));
+          const hCount = dayDocs.filter(d => d.humanInvolved === true || d.status === 'active' || d.status === 'pending' || d.agent).length;
+          return { date: format(day, 'EEE'), total: dayDocs.length, ai: dayDocs.length - hCount, human: hCount };
         });
-        setChartData(data);
+        setChartData(chart);
       } catch (error) {
         console.error("Error fetching overview stats:", error);
       } finally {
