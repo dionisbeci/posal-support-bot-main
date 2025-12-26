@@ -186,31 +186,44 @@ const ChatWidget = memo(function ChatWidget() {
     messagesRef.current = messages;
   }, [messages]);
   useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
   }, [messages, isSending, agentTyping]);
 
+  const lastTypingUpdateRef = useRef<number>(0);
+
   const handleTyping = async () => {
     if (!conversationId) return;
 
-    // Clear existing timeout to debounce
+    // Clear existing timeout to debounce the "stop typing" event
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
-    // Update typing status to true
-    await updateDoc(doc(db, 'conversations', conversationId), {
-      'typing.visitor': true,
-      'typing.lastUpdate': serverTimestamp()
-    });
+    const now = Date.now();
+    // Throttle the "start/continue typing" updatess to Firestore to max once every 2 seconds
+    if (now - lastTypingUpdateRef.current > 2000) {
+      await updateDoc(doc(db, 'conversations', conversationId), {
+        'typing.visitor': true,
+        'typing.lastUpdate': serverTimestamp()
+      });
+      lastTypingUpdateRef.current = now;
+    }
 
     // Set timeout to reset typing status
+    // Set timeout to reset typing status to false if no input for 2 seconds
+    // This is still debounced so it only runs 2s after the LAST keystroke
     typingTimeoutRef.current = setTimeout(async () => {
       await updateDoc(doc(db, 'conversations', conversationId), {
         'typing.visitor': false,
         'typing.lastUpdate': serverTimestamp()
       });
-    }, 2000);
+      // Reset the throttle ref so next typing immediately triggers an update
+      lastTypingUpdateRef.current = 0;
+    }, 4000); // Increased buffer to prevent flickering since we throttle updates
   };
 
   const handleSendMessage = async (e: FormEvent) => {

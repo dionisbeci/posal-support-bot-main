@@ -214,6 +214,8 @@ export default function ConversationDetailPage() {
 
 
 
+  const lastTypingUpdateRef = useRef<number>(0);
+
   useEffect(() => {
     const viewport = scrollAreaRef.current?.querySelector('[data-radix-scroll-area-viewport]');
     if (viewport) viewport.scrollTop = viewport.scrollHeight;
@@ -225,17 +227,24 @@ export default function ConversationDetailPage() {
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    await updateDoc(doc(db, 'conversations', id), {
-      'typing.agent': true,
-      'typing.lastUpdate': serverTimestamp()
-    });
+
+    const now = Date.now();
+    // Throttle updates to max once every 2 seconds
+    if (now - lastTypingUpdateRef.current > 2000) {
+      await updateDoc(doc(db, 'conversations', id), {
+        'typing.agent': true,
+        'typing.lastUpdate': serverTimestamp()
+      });
+      lastTypingUpdateRef.current = now;
+    }
 
     typingTimeoutRef.current = setTimeout(async () => {
       await updateDoc(doc(db, 'conversations', id), {
         'typing.agent': false,
         'typing.lastUpdate': serverTimestamp()
       });
-    }, 2000);
+      lastTypingUpdateRef.current = 0;
+    }, 4000); // Increased buffer
   };
 
   const handleSendMessage = async (e: FormEvent) => {
