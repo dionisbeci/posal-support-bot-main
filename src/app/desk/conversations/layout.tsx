@@ -46,7 +46,7 @@ export default function ConversationsLayout({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'active' | 'archived'>('active');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'ended'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'in_progress' | 'ended' | 'inactive'>('all');
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
@@ -209,6 +209,8 @@ export default function ConversationsLayout({
         return ['active', 'pending', 'ai'].includes(convo.status);
       } else if (statusFilter === 'ended') {
         return convo.status === 'ended';
+      } else if (statusFilter === 'inactive') {
+        return convo.status === 'inactive';
       }
       return true;
     } else {
@@ -429,6 +431,18 @@ export default function ConversationsLayout({
                     variant="outline"
                     className={cn(
                       "cursor-pointer border-transparent",
+                      statusFilter === 'inactive'
+                        ? "bg-yellow-100 text-yellow-800 hover:bg-yellow-200 border-yellow-300" // Distinct but soft
+                        : "bg-yellow-50 text-yellow-700 hover:bg-yellow-100/50 hover:text-yellow-800"
+                    )}
+                    onClick={() => setStatusFilter('inactive')}
+                  >
+                    Inactive
+                  </Badge>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "cursor-pointer border-transparent",
                       statusFilter === 'ended'
                         ? "bg-gray-500 text-white hover:bg-gray-600"
                         : "bg-gray-500/10 text-gray-700 hover:bg-gray-500/20 hover:text-gray-800"
@@ -515,6 +529,10 @@ export default function ConversationsLayout({
                               {convo.status === 'ended' ? (
                                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold bg-gray-200 text-gray-700 border-transparent">
                                   Chat Ended
+                                </Badge>
+                              ) : convo.status === 'inactive' ? (
+                                <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold bg-yellow-50 text-yellow-700 border-yellow-200">
+                                  Inactive
                                 </Badge>
                               ) : convo.status === 'active' ? (
                                 <Badge className="h-5 px-1.5 text-[10px] bg-blue-600 hover:bg-blue-700 uppercase font-bold border-transparent text-white">
