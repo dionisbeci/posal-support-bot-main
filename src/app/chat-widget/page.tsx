@@ -141,7 +141,7 @@ const ChatWidget = memo(function ChatWidget() {
         if (data.typing && data.typing.agent) {
           const lastUpdate = data.typing.lastUpdate instanceof Timestamp ? data.typing.lastUpdate.toDate() : new Date();
           const now = new Date();
-          if (now.getTime() - lastUpdate.getTime() < 5000) {
+          if (now.getTime() - lastUpdate.getTime() < 12000) {
             setAgentTyping(true);
           } else {
             setAgentTyping(false);
@@ -204,8 +204,8 @@ const ChatWidget = memo(function ChatWidget() {
     }
 
     const now = Date.now();
-    // Throttle the "start/continue typing" updatess to Firestore to max once every 2 seconds
-    if (now - lastTypingUpdateRef.current > 2000) {
+    // Throttle the "start/continue typing" updates to Firestore to max once every 6 seconds
+    if (now - lastTypingUpdateRef.current > 6000) {
       await updateDoc(doc(db, 'conversations', conversationId), {
         'typing.visitor': true,
         'typing.lastUpdate': serverTimestamp()
@@ -223,7 +223,7 @@ const ChatWidget = memo(function ChatWidget() {
       });
       // Reset the throttle ref so next typing immediately triggers an update
       lastTypingUpdateRef.current = 0;
-    }, 4000); // Increased buffer to prevent flickering since we throttle updates
+    }, 10000); // 10s buffer to account for 6s throttle
   };
 
   const handleSendMessage = async (e: FormEvent) => {

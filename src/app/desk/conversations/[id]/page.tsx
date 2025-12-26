@@ -229,8 +229,8 @@ export default function ConversationDetailPage() {
     }
 
     const now = Date.now();
-    // Throttle updates to max once every 2 seconds
-    if (now - lastTypingUpdateRef.current > 2000) {
+    // Throttle updates to max once every 6 seconds
+    if (now - lastTypingUpdateRef.current > 6000) {
       await updateDoc(doc(db, 'conversations', id), {
         'typing.agent': true,
         'typing.lastUpdate': serverTimestamp()
@@ -244,7 +244,7 @@ export default function ConversationDetailPage() {
         'typing.lastUpdate': serverTimestamp()
       });
       lastTypingUpdateRef.current = 0;
-    }, 4000); // Increased buffer
+    }, 10000); // 10s buffer to account for 6s throttle
   };
 
   const handleSendMessage = async (e: FormEvent) => {

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Conversation } from '@/lib/types';
 import { db } from '@/lib/firebase';
 import { doc, updateDoc, addDoc, collection, serverTimestamp, Timestamp } from 'firebase/firestore';
@@ -11,14 +11,24 @@ import { doc, updateDoc, addDoc, collection, serverTimestamp, Timestamp } from '
  * Optimized for Firebase quota: verified locally, minimal writes.
  */
 export function useChatAutoStatus(conversation: Conversation | null | undefined, conversationId: string | null | undefined) {
+    const convoRef = useRef(conversation);
     useEffect(() => {
-        if (!conversation || !conversationId) return;
-        if (conversation.status === 'ended' || conversation.status === 'archived') return;
+        convoRef.current = conversation;
+    }, [conversation]);
+
+    useEffect(() => {
+        if (!conversationId) return;
+        // Don't run on ended/archived
+        if (convoRef.current?.status === 'ended' || convoRef.current?.status === 'archived') return;
 
         const checkStatus = async () => {
+            const currentConvo = convoRef.current;
+            if (!currentConvo) return;
+            if (currentConvo.status === 'ended' || currentConvo.status === 'archived') return;
+
             // 1. Robust Date Parsing (Read-only from passed object)
             let lastActivityTime = 0;
-            const lma = conversation.lastMessageAt;
+            const lma = currentConvo.lastMessageAt;
 
             if (lma instanceof Date) {
                 lastActivityTime = lma.getTime();
@@ -41,13 +51,13 @@ export function useChatAutoStatus(conversation: Conversation | null | undefined,
             const threeHours = 3 * 60 * 60 * 1000;
 
             // DEBUG: Log calculation
-            console.log(`[AutoStatus] ID: ${conversationId}, Status: ${conversation.status}, Diff: ${diff}, LastAct: ${lastActivityTime}`);
+            console.log(`[AutoStatus] ID: ${conversationId}, Status: ${currentConvo.status}, Diff: ${diff}, LastAct: ${lastActivityTime}`);
 
             // 2. Logic Implementation
 
             // Case A: Mark as 'inactive' (Active -> Inactive)
             // Only triggered if currently 'active' or 'ai'
-            if (['active', 'ai'].includes(conversation.status) && diff > fiveMinutes) {
+            if (['active', 'ai'].includes(currentConvo.status) && diff > fiveMinutes) {
                 console.log(`[AutoStatus] Marking inactive: ${conversationId} (Diff: ${diff}ms)`);
                 try {
                     await updateDoc(doc(db, 'conversations', conversationId), {
@@ -63,7 +73,7 @@ export function useChatAutoStatus(conversation: Conversation | null | undefined,
             // Triggered if > 3 hours
             if (diff > threeHours) {
                 // Double check we haven't already ended it (though status check above covers most)
-                if (conversation.lastMessage === 'Biseda përfundoi.') return;
+                if (currentConvo.lastMessage === 'Biseda përfundoi.') return;
 
                 console.log(`[AutoStatus] Auto-ending: ${conversationId} (Diff: ${diff}ms)`);
                 try {
@@ -92,5 +102,5 @@ export function useChatAutoStatus(conversation: Conversation | null | undefined,
         checkStatus();
 
         return () => clearInterval(interval);
-    }, [conversation, conversationId]);
+    }, [conversationId]); // Only restart if ID changes
 }

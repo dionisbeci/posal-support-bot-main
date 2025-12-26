@@ -86,6 +86,7 @@ export default function ConversationsLayout({
 
 
   const agentCache = useRef<Record<string, Agent>>({});
+  const pendingAgentFetches = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const q = query(collection(db, 'conversations'), orderBy('lastMessageAt', 'desc'), limit(limitCount));
@@ -123,8 +124,9 @@ export default function ConversationsLayout({
       });
 
       // 2. Fetch missing agents in parallel
-      const missingAgentIds = Object.keys(uniqueAgentRefs);
+      const missingAgentIds = Object.keys(uniqueAgentRefs).filter(id => !pendingAgentFetches.current.has(id));
       if (missingAgentIds.length > 0) {
+        missingAgentIds.forEach(id => pendingAgentFetches.current.add(id));
         console.log(`Fetching ${missingAgentIds.length} missing agents...`);
         await Promise.all(missingAgentIds.map(async (id) => {
           try {
@@ -134,6 +136,8 @@ export default function ConversationsLayout({
             }
           } catch (e) {
             console.error(`Error fetching agent ${id}:`, e);
+          } finally {
+            pendingAgentFetches.current.delete(id);
           }
         }));
       }
@@ -155,7 +159,6 @@ export default function ConversationsLayout({
       setLoading(false);
     });
 
-    return () => unsubscribe();
     return () => unsubscribe();
   }, [limitCount]);
 
@@ -561,8 +564,8 @@ export default function ConversationsLayout({
                                 const lastUpdate = convo.typing.lastUpdate instanceof Timestamp
                                   ? convo.typing.lastUpdate.toDate()
                                   : (convo.typing.lastUpdate instanceof Date ? convo.typing.lastUpdate : new Date(0));
-                                // Check if typing status is fresh (e.g. within last 5 seconds)
-                                return new Date().getTime() - lastUpdate.getTime() < 5000;
+                                // Check if typing status is fresh (e.g. within last 12 seconds)
+                                return new Date().getTime() - lastUpdate.getTime() < 12000;
                               })() ? (
                                 <p className="text-sm text-green-600 italic font-medium truncate flex-1 animate-pulse">
                                   Typing...
