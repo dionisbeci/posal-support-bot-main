@@ -407,7 +407,7 @@ export default function ConversationsLayout({
                 <Input placeholder="Search..." className="pl-8" />
               </div>
               {viewMode === 'active' && (
-                <div className="flex items-center gap-2 mt-2 px-1">
+                <div className="flex flex-wrap items-center gap-2 mt-2 px-1">
                   <Badge
                     variant={statusFilter === 'all' ? "secondary" : "outline"}
                     className="cursor-pointer hover:bg-secondary/80"
@@ -465,7 +465,7 @@ export default function ConversationsLayout({
                         <div
                           key={convo.id}
                           className={cn(
-                            'flex items-center gap-2 p-4 border-b hover:bg-muted/50 transition-colors cursor-pointer',
+                            'flex items-center gap-2 p-4 border-b hover:bg-muted/50 transition-colors cursor-pointer overflow-hidden max-w-full',
                             pathname === `/desk/conversations/${convo.id}` && !isSelectionMode && 'bg-muted'
                           )}
                           onClick={(e) => {
@@ -514,18 +514,18 @@ export default function ConversationsLayout({
                               )}`}
                             />
                           </div>
-                          <div className="flex-1 truncate">
-                            <div className="flex items-baseline justify-between">
+                          <div className="flex-1 min-w-0 grid gap-1">
+                            <div className="flex items-baseline justify-between gap-1">
                               <p className="font-semibold truncate">
                                 {convo.title || convo.agentDetails?.name || `Visitor ${convo.visitorId.substring(0, 6)}`}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground shrink-0">
                                 {isClient ? formatDistanceToNow(new Date(convo.lastMessageAt as Date), {
                                   addSuffix: true,
                                 }) : ''}
                               </p>
                             </div>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap overflow-hidden">
                               {convo.status === 'ended' ? (
                                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px] uppercase font-bold bg-gray-200 text-gray-700 border-transparent">
                                   Chat Ended
@@ -583,10 +583,10 @@ export default function ConversationsLayout({
                           </div>
                         </div>
                       ))}
-                      <div className="p-4">
+                      <div className="p-4 w-full overflow-hidden">
                         <Button
                           variant="outline"
-                          className="w-full"
+                          className="w-full truncate"
                           onClick={(e) => {
                             e.stopPropagation();
                             setLimitCount(prev => prev + 50);
