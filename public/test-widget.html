@@ -51,6 +51,13 @@
             </pre>
         </div>
         <p>Click the chat button in the bottom right to start testing.</p>
+
+        <div style="margin-top: 2rem;">
+            <button id="switchUserBtn"
+                style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1rem;">
+                Simulate Switch User
+            </button>
+        </div>
     </div>
 
     <!-- 
@@ -70,7 +77,33 @@
                         shopId: 'shop_987'
                     }
                 });
-                console.log('Chat Widget initialized with params');
+                console.log('Chat Widget initialized for User A');
+            }
+        });
+
+        document.getElementById('switchUserBtn').addEventListener('click', function () {
+            if (window.ChatWidget) {
+                console.log('Switching user...');
+
+                // 1. Destroy current session
+                window.ChatWidget.destroy(true);
+
+                // 2. Re-initialize with new user data
+                setTimeout(() => {
+                    const randomId = Math.floor(Math.random() * 1000);
+                    window.ChatWidget.init({
+                        chatId: 'default',
+                        params: {
+                            userId: 'user_' + randomId,
+                            userName: 'New User ' + randomId,
+                            shopId: 'shop_987'
+                        }
+                    });
+
+                    // Open it immediately to see the result
+                    window.ChatWidget.open();
+                    alert('Switched to New User ' + randomId);
+                }, 500); // Small delay to simulate app state change
             }
         });
     </script>

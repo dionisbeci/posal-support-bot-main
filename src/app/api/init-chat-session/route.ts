@@ -102,19 +102,44 @@ export async function POST(req: Request) {
 
     // SESSION LOOKUP / CREATION
     const conversationsCollection = db.collection('conversations');
-    const existingConvoSnap = await conversationsCollection
-      .where('externalId', '==', chatId)
-      .limit(1)
-      .get();
 
     let visitorId: string;
     let convoId: string;
     let isNewConvo = false;
+    let existingConvoDoc = null;
 
-    if (!existingConvoSnap.empty) {
-      const convoDoc = existingConvoSnap.docs[0];
-      convoId = convoDoc.id;
-      visitorId = convoDoc.data().visitorId;
+    // 1. Try to find an existing active conversation by userId if provided
+    if (params?.userId) {
+      const userConvoQuery = await conversationsCollection
+        .where('userId', '==', params.userId)
+        .orderBy('lastMessageAt', 'desc')
+        .limit(1)
+        .get();
+
+      if (!userConvoQuery.empty) {
+        const doc = userConvoQuery.docs[0];
+        // Only resume if not ended
+        if (doc.data().status !== 'ended') {
+          existingConvoDoc = doc;
+        }
+      }
+    }
+    // 2. Fallback: Lookup by externalId (chatId) ONLY if it is not 'default'
+    // 'default' is a generic config ID, not a unique session ID.
+    else if (chatId && chatId !== 'default') {
+      const convoQuery = await conversationsCollection
+        .where('externalId', '==', chatId)
+        .limit(1)
+        .get();
+
+      if (!convoQuery.empty) {
+        existingConvoDoc = convoQuery.docs[0];
+      }
+    }
+
+    if (existingConvoDoc) {
+      convoId = existingConvoDoc.id;
+      visitorId = existingConvoDoc.data().visitorId;
     } else {
       isNewConvo = true;
       const auth = admin.auth();

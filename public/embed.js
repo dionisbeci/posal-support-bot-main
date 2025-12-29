@@ -62,9 +62,12 @@
     }
   }
 
+  let styleElement = null;
+
   function injectStyles() {
-    const style = document.createElement('style');
-    style.innerHTML = `
+    if (styleElement) return;
+    styleElement = document.createElement('style');
+    styleElement.innerHTML = `
       #posal-chat-widget-container {
         position: fixed;
         bottom: 90px;
@@ -121,9 +124,11 @@
         transition: transform 0.3s ease;
       }
 
+      /* 
       #posal-chat-toggle-button.is-open svg {
-        // transform: rotate(90deg); // Removed rotate for the < icon
+        // transform: rotate(90deg); 
       }
+      */
 
       @media (max-width: 768px) {
         #posal-chat-widget-container {
@@ -149,16 +154,18 @@
         }
       }
     `;
-    document.head.appendChild(style);
+    document.head.appendChild(styleElement);
   }
 
   function createWidgetContainer() {
+    if (state.widgetContainer) return;
     state.widgetContainer = document.createElement('div');
     state.widgetContainer.id = 'posal-chat-widget-container';
     document.body.appendChild(state.widgetContainer);
   }
 
   function createToggleButton() {
+    if (state.toggleButton) return;
     state.toggleButton = document.createElement('div');
     state.toggleButton.id = 'posal-chat-toggle-button';
     state.toggleButton.innerHTML = `
@@ -203,13 +210,17 @@
 
   function close() {
     state.isOpen = false;
-    state.widgetContainer.classList.remove('is-open');
-    state.toggleButton.classList.remove('is-open');
-    state.toggleButton.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-      </svg>
-    `;
+    if (state.widgetContainer) {
+      state.widgetContainer.classList.remove('is-open');
+    }
+    if (state.toggleButton) {
+      state.toggleButton.classList.remove('is-open');
+      state.toggleButton.innerHTML = `
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+        </svg>
+      `;
+    }
     saveState();
   }
 
@@ -221,10 +232,38 @@
     }
   }
 
+  function destroy(shouldClearSession = true) {
+    // Remove DOM elements
+    if (state.widgetContainer && state.widgetContainer.parentNode) {
+      state.widgetContainer.parentNode.removeChild(state.widgetContainer);
+    }
+    if (state.toggleButton && state.toggleButton.parentNode) {
+      state.toggleButton.parentNode.removeChild(state.toggleButton);
+    }
+    if (styleElement && styleElement.parentNode) {
+      styleElement.parentNode.removeChild(styleElement);
+      styleElement = null; // Reset style reference
+    }
+
+    // Reset state
+    state.widgetContainer = null;
+    state.toggleButton = null;
+    state.iframe = null;
+    state.isOpen = false;
+    state.params = {};
+
+    // Clear session storage if requested (default true)
+    if (shouldClearSession) {
+      localStorage.removeItem(STORAGE_KEY);
+      state.chatId = 'default';
+    }
+  }
+
   window.ChatWidget = {
     init: init,
     open: open,
     close: close,
     toggle: toggle,
+    destroy: destroy,
   };
 })();
