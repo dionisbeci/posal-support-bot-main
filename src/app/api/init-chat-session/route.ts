@@ -134,7 +134,10 @@ export async function POST(req: Request) {
           os: osString,
           type: result.device.type || 'Desktop'
         },
-        location: locationData
+        location: locationData,
+        userId: params?.userId || null,
+        userName: params?.userName || null,
+        shopId: params?.shopId || null,
       };
 
       const convoRef = await conversationsCollection.add(conversationData);

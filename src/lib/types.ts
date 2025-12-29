@@ -36,6 +36,9 @@ export type Conversation = {
     city?: string;
     ip?: string;
   };
+  userId?: string;
+  userName?: string;
+  shopId?: string;
 };
 
 export type CannedResponse = {

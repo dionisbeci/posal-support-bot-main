@@ -80,14 +80,18 @@ async function createAnonymousUser(): Promise<{ visitorId: string, token: string
  * Creates a new conversation in Firestore, including the initial welcome message.
  * @param visitorId The ID of the visitor who started the conversation.
  * @param welcomeMessage The initial message from the AI.
+ * @param params Optional parameters from the host page.
  * @returns The ID of the newly created conversation.
  */
-async function createConversation(visitorId: string, welcomeMessage: string): Promise<string> {
+async function createConversation(visitorId: string, welcomeMessage: string, params?: Record<string, any>): Promise<string> {
   const conversationData: Omit<Conversation, 'id' | 'agent' | 'lastMessageAt'> = {
     visitorId: visitorId,
     lastMessage: welcomeMessage,
     status: 'ai',
     unreadCount: 0,
+    userId: params?.userId || null,
+    userName: params?.userName || null,
+    shopId: params?.shopId || null,
   };
 
   const conversationsCollection = db.collection('conversations');
@@ -97,16 +101,16 @@ async function createConversation(visitorId: string, welcomeMessage: string): Pr
     agent: null, // Initially unassigned
   });
 
-  const welcomeMessageData: Omit<Message, 'id'|'timestamp'> = {
-     role: 'ai',
-     content: welcomeMessage,
-     conversationId: convoRef.id
+  const welcomeMessageData: Omit<Message, 'id' | 'timestamp'> = {
+    role: 'ai',
+    content: welcomeMessage,
+    conversationId: convoRef.id
   };
 
   const messagesCollection = db.collection('messages');
   await messagesCollection.add({
-     ...welcomeMessageData,
-     timestamp: admin.firestore.FieldValue.serverTimestamp()
+    ...welcomeMessageData,
+    timestamp: admin.firestore.FieldValue.serverTimestamp()
   });
 
   return convoRef.id;
@@ -127,7 +131,7 @@ const initChatSessionFlow = ai.defineFlow(
     try {
       const { welcomeMessage } = await verifyDomainAndGetWelcomeMessage(input.origin);
       const { visitorId, token } = await createAnonymousUser();
-      const conversationId = await createConversation(visitorId, welcomeMessage);
+      const conversationId = await createConversation(visitorId, welcomeMessage, input.params);
 
       return {
         success: true,
