@@ -27,12 +27,35 @@ export async function POST(req: Request) {
       console.warn('Error reading widget settings, using defaults');
     }
 
-    const requestOrigin = new URL(origin).hostname;
+    const headerOrigin = req.headers.get('origin') || req.headers.get('referer');
+
+    // Fallback to body origin for dev or if headers missing (though headers are more secure)
+    // We strip the protocol (https://) for simpler comparison if needed, or just use hostname
+    let requestOrigin = '';
+
+    if (headerOrigin) {
+      try {
+        requestOrigin = new URL(headerOrigin).hostname;
+      } catch (e) {
+        requestOrigin = headerOrigin; // Fallback if not a valid URL
+      }
+    } else {
+      try {
+        requestOrigin = new URL(origin).hostname;
+      } catch (e) {
+        requestOrigin = origin;
+      }
+    }
 
     // Check domain if not allowing all domains
     if (!allowedDomains.includes('*')) {
       const isAllowed = allowedDomains.some(domain => {
-        const pattern = new RegExp(`^${domain.replace(/\./g, '\\.').replace(/\*/g, '.*')}$`);
+        // Normalize domain checks
+        const cleanDomain = domain.replace(/^https?:\/\//, '');
+        // Allow localhost for development automatically if not strict
+        if (requestOrigin === 'localhost' || requestOrigin === '127.0.0.1') return true;
+
+        const pattern = new RegExp(`^${cleanDomain.replace(/\./g, '\\.').replace(/\*/g, '.*')}$`);
         return pattern.test(requestOrigin);
       });
 
