@@ -267,11 +267,15 @@
     }
   }
 
-  window.ChatWidget = {
+  const API = {
     init: init,
     open: open,
     close: close,
     toggle: toggle,
     destroy: destroy,
   };
+
+  window.PosalChatWidget = API;
+  // Backward compatibility
+  window.ChatWidget = API;
 })();
