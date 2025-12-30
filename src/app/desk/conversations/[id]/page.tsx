@@ -880,6 +880,24 @@ export default function ConversationDetailPage() {
                         <span className="text-muted-foreground">ID</span>
                         <span className="font-mono">{conversation.visitorId.substring(0, 8)}</span>
                       </div>
+                      {conversation.userName && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">User Name</span>
+                          <span className="font-medium text-right">{conversation.userName}</span>
+                        </div>
+                      )}
+                      {conversation.userId && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">User ID</span>
+                          <span className="font-mono text-right">{conversation.userId}</span>
+                        </div>
+                      )}
+                      {conversation.shopId && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Shop ID</span>
+                          <span className="font-mono text-right">{conversation.shopId}</span>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Location</span>
                         <span>
