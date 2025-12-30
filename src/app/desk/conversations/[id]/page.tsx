@@ -741,6 +741,12 @@ export default function ConversationDetailPage() {
                     <span className="font-mono text-right">{conversation.shopId}</span>
                   </div>
                 )}
+                {conversation.route && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Current Route</span>
+                    <span className="font-mono text-right break-all max-w-[150px]">{conversation.route}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Location</span>
                   <span>
@@ -896,6 +902,12 @@ export default function ConversationDetailPage() {
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Shop ID</span>
                           <span className="font-mono text-right">{conversation.shopId}</span>
+                        </div>
+                      )}
+                      {conversation.route && (
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Current Route</span>
+                          <span className="font-mono text-right break-all max-w-[150px]">{conversation.route}</span>
                         </div>
                       )}
                       <div className="flex justify-between">

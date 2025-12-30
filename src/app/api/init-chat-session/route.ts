@@ -196,6 +196,7 @@ export async function POST(req: Request) {
         userId: params?.userId || null,
         userName: params?.userName || null,
         shopId: params?.shopId || null,
+        route: params?.route || null,
       };
 
       const convoRef = await conversationsCollection.add(conversationData);

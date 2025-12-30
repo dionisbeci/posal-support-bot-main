@@ -16,6 +16,7 @@ const ContextAwareResponseInputSchema = z.object({
       })
     )
     .optional(),
+  route: z.string().optional(),
 });
 export type ContextAwareResponseInput = z.infer<typeof ContextAwareResponseInputSchema>;
 
@@ -40,11 +41,13 @@ async function useAssistantAPI(
       console.log('Created new thread:', currentThreadId);
     }
 
+    const routeContext = input.route ? `\n      CURRENT CONTEXT: The user is currently on the "${input.route}" page of the POS system. Use this context to answer relevant questions.` : '';
+
     await openai.beta.threads.messages.create(currentThreadId, {
       role: 'user',
       content: `System Instruction: You are a helpful support agent. You MUST respond ONLY in Albanian.
       
-      You are an expert on the "POS.al" system.
+      You are an expert on the "POS.al" system.${routeContext}
       1. If the user asks about POS.al, answer helpfully.
       2. If the user asks about UNRELATED topics (sports, politics, weather, etc.), politely REFUSE to answer. Say you only focus on POS.al. DO NOT apologize excessively.
       
@@ -113,7 +116,7 @@ async function useAssistantAPI(
 }
 
 /**
- * Uses OpenAI Chat Completions API (for regular models) - No changes needed
+ * Uses OpenAI Chat Completions API (for regular models)
  */
 async function useChatCompletions(
   model: string,
@@ -122,11 +125,13 @@ async function useChatCompletions(
   try {
     const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
 
+    const routeContext = input.route ? `\n      CURRENT CONTEXT: The user is currently on the "${input.route}" page of the POS system. Use this context to answer relevant questions.` : '';
+
     // Add system instruction for confidence
     messages.push({
       role: 'system',
       content: `You are a helpful support agent for "POS.al". You MUST respond ONLY in Albanian.
-      
+      ${routeContext}
       If you are genuinely UNSURE about a POS.al question, or if the user explicitly asks for a human agent, you MUST reply with this EXACT phrase:
       "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?"
 
@@ -180,7 +185,7 @@ async function useChatCompletions(
 }
 
 /**
- * Generates a context-aware AI response. - No changes needed
+ * Generates a context-aware AI response.
  */
 export async function getContextAwareResponse(
   input: ContextAwareResponseInput

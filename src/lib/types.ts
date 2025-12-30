@@ -39,6 +39,7 @@ export type Conversation = {
   userId?: string;
   userName?: string;
   shopId?: string;
+  route?: string;
 };
 
 export type CannedResponse = {

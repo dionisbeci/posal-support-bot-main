@@ -46,7 +46,8 @@
 {
   userId: "user_123456",
   userName: "John Doe",
-  shopId: "shop_987"
+  shopId: "shop_987",
+  route: "/inventory/dashboard"
 }
             </pre>
         </div>
@@ -60,10 +61,7 @@
         </div>
     </div>
 
-    <!-- 
-      In a real scenario, this script would be loaded from the widget server.
-      Here we load it from the local server.
-    -->
+
     <script src="/embed.js"></script>
     <script>
         // Initialize the Chat Widget with test parameters
@@ -74,7 +72,8 @@
                     params: {
                         userId: 'user_123456',
                         userName: 'John Doe',
-                        shopId: 'shop_987'
+                        shopId: 'shop_987',
+                        route: '/inventory/dashboard'
                     }
                 });
                 console.log('Chat Widget initialized for User A');
@@ -96,7 +95,8 @@
                         params: {
                             userId: 'user_' + randomId,
                             userName: 'New User ' + randomId,
-                            shopId: 'shop_987'
+                            shopId: 'shop_987',
+                            route: '/settings/billing' // Different route for test
                         }
                     });
 
