@@ -1,5 +1,3 @@
-// /src/app/api/ai/respond/route.ts
-
 import { NextResponse } from 'next/server';
 import { getContextAwareResponse } from '@/ai/flows/context-aware-responses';
 import { classifyUserIntent } from '@/lib/classification';
@@ -7,24 +5,20 @@ import { classifyUserIntent } from '@/lib/classification';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    // We only need the user's message and the current threadId (if it exists)
     const { message, threadId, conversationId } = body;
 
     if (!message) {
       return NextResponse.json({ error: 'Missing message' }, { status: 400 });
     }
 
-    // OPTIMIZATION: Single Firestore Read
-    // We fetch the conversation document ONCE and use it for all checks below.
+    // 1. Fetch Conversation Context (Single Read)
     let convoData: any = null;
-    let convoRef: any = null;
-    let admin: any = null;
-    let db: any = null;
+    let convoRef = null;
+
+    // Dynamic import to match functioning init-chat-session pattern
+    const { db, admin } = await import('@/lib/firebase-admin');
 
     if (conversationId) {
-      const firebase = await import('@/lib/firebase-admin');
-      admin = firebase.admin;
-      db = firebase.db;
       convoRef = db.collection('conversations').doc(conversationId);
       const convoSnap = await convoRef.get();
       if (convoSnap.exists) {
@@ -32,108 +26,87 @@ export async function POST(request: Request) {
       }
     }
 
-    // Check if we are in a "handoff confirmation" state
-    if (convoData?.handoffConfirmationPending) {
-      // CLASSIFY USER INTENT
+    // 2. Handle Handoff Confirmation State
+    if (convoData?.handoffConfirmationPending && convoRef) {
       const intent = await classifyUserIntent(message);
 
       if (intent === 'POSITIVE') {
-        // User wants support -> Connect them
         await convoRef.update({
-          status: 'pending', // Or 'active' if you want immediate join, but 'pending' usually means waiting for agent
+          status: 'pending',
           handoffConfirmationPending: admin.firestore.FieldValue.delete(),
-          lastMessage: 'Po lidheni me një agjent...', // System message
+          lastMessage: 'Po lidheni me një agjent...',
           lastMessageAt: admin.firestore.FieldValue.serverTimestamp()
         });
 
         return NextResponse.json({
           response: "Në rregull, po ju lidh me një nga agjentët tanë. Ju lutem prisni pak.",
-          threadId // Keep same thread
+          threadId
         });
-      } else if (intent === 'NEGATIVE') {
-        // User declined -> Remove pending flag and continue normal AI chat
-        await convoRef.update({
-          handoffConfirmationPending: admin.firestore.FieldValue.delete()
-        });
-        // Proceed to generate normal AI response below...
       } else {
-        // OTHER -> User ignored the question or asked something else.
-        // Remove pending flag and treat as normal message.
+        // NEGATIVE or OTHER -> Continue with AI
         await convoRef.update({
           handoffConfirmationPending: admin.firestore.FieldValue.delete()
         });
-        // Proceed to generate normal AI response below...
       }
     }
 
-    // This is the most important line.
-    // It calls your real AI logic with the necessary information.
-    // OPTIMIZATION: Pass the 'route' directly from the already-fetched convoData
+    // 3. Generate AI Response
     const result = await getContextAwareResponse({
       message,
       threadId,
-      route: convoData?.route // Pass route context if available
+      // Ensure route is string or undefined (null becomes undefined)
+      route: convoData?.route || undefined
     });
 
     if (!result || typeof result.response !== 'string') {
       return NextResponse.json({ error: 'AI did not return a valid response' }, { status: 500 });
     }
 
-    // Check for "unsure" response to trigger handoff
-    const handoffPhrase = "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?";
+    // 4. Update Conversation based on AI result
+    if (convoRef && convoData) {
+      const updates: any = {
+        lastMessage: result.response,
+        lastMessageAt: admin.firestore.FieldValue.serverTimestamp()
+      };
 
-    if (result.response.includes(handoffPhrase)) {
-      // Handoff logic: Update conversation to 'handoffConfirmationPending'
-      // We use the existing convoRef
-      if (convoRef) {
-        await convoRef.update({
-          handoffConfirmationPending: true,
-          // status: 'pending', // DO NOT change status yet!
-          lastMessage: result.response,
-          lastMessageAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+      // Handle Handoff Prompt
+      const handoffPhrase = "Të them të drejtën, kërkova por nuk po gjej një përgjigje të saktë për këtë. Dëshiron të të lidh këtu në chat me një koleg tjetër që ka më shumë informacion për këtë?";
+      if (result.response.includes(handoffPhrase)) {
+        updates.handoffConfirmationPending = true;
       }
-    }
 
-    // START: Generate Title Logic
-    // We use the already-fetched convoData to check if title is missing
-    if (convoRef && !convoData?.title) {
-      // Fetch recent history for context
-      // The user message is already in Firestore (added by client).
-      // The AI response is NOT yet in Firestore (client adds it after this API returns).
-      const previousMessagesSnap = await db.collection('messages')
-        .where('conversationId', '==', conversationId)
-        .orderBy('timestamp', 'desc')
-        .limit(5)
-        .get();
-
-      const previousMessages = previousMessagesSnap.docs
-        .map((d: any) => ({ role: d.data().role, content: d.data().content }))
-        .reverse();
-
-      let history = previousMessages.map((m: any) => `${m.role}: ${m.content}`).join('\n');
-      // Add the current AI response to history context
-      history += `\nai: ${result.response}`;
-
-      const { generateTitle } = await import('@/ai/flows/generate-title');
-      const { title } = await generateTitle({ conversationHistory: history });
-
-      if (title) {
-        await convoRef.update({ title });
+      // Save Confidence
+      if (result.confidence !== undefined) {
+        updates.confidenceScore = result.confidence;
       }
-    }
-    // END: Generate Title Logic
 
-    // Save confidence score if available
-    if (conversationId && result.confidence !== undefined) {
-      const { admin, db } = await import('@/lib/firebase-admin');
-      await db.collection('conversations').doc(conversationId).update({
-        confidenceScore: result.confidence
-      });
+      // Update Conversation Page Title if missing
+      if (!convoData.title) {
+        try {
+          const previousMessagesSnap = await db.collection('messages')
+            .where('conversationId', '==', conversationId)
+            .orderBy('timestamp', 'desc')
+            .limit(5)
+            .get();
+
+          const previousMessages = previousMessagesSnap.docs
+            .map((d: any) => ({ role: d.data().role, content: d.data().content }))
+            .reverse();
+
+          let history = previousMessages.map((m: any) => `${m.role}: ${m.content}`).join('\n');
+          history += `\nai: ${result.response}`;
+
+          const { generateTitle } = await import('@/ai/flows/generate-title');
+          const { title } = await generateTitle({ conversationHistory: history });
+          if (title) updates.title = title;
+        } catch (titleError) {
+          console.error('Failed to generate title:', titleError);
+        }
+      }
+
+      await convoRef.update(updates);
     }
 
-    // Send the AI's response AND the threadId back to the frontend.
-    // The frontend needs the threadId to continue the conversation.
     return NextResponse.json({
       response: result.response,
       threadId: result.threadId,

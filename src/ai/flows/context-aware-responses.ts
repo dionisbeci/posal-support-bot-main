@@ -16,7 +16,7 @@ const ContextAwareResponseInputSchema = z.object({
       })
     )
     .optional(),
-  route: z.string().optional(),
+  route: z.string().nullable().optional(),
 });
 export type ContextAwareResponseInput = z.infer<typeof ContextAwareResponseInputSchema>;
 

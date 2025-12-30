@@ -265,7 +265,11 @@ const ChatWidget = memo(function ChatWidget() {
         }),
       });
 
-      if (!res.ok) throw new Error('Failed to get AI response');
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        console.error('AI API Error:', errorData);
+        throw new Error(errorData.error || 'Failed to get AI response');
+      }
 
       const data = await res.json();
 
