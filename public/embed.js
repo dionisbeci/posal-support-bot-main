@@ -118,17 +118,30 @@
         background: #2563eb;
       }
 
-      #posal-chat-toggle-button svg {
-        width: 30px;
-        height: 30px;
-        transition: transform 0.3s ease;
+      #posal-chat-toggle-button .icon-open,
+      #posal-chat-toggle-button .icon-close {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease;
       }
 
-      /* 
-      #posal-chat-toggle-button.is-open svg {
-        // transform: rotate(90deg); 
+      #posal-chat-toggle-button .icon-open {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
       }
-      */
+
+      #posal-chat-toggle-button.is-open .icon-open {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 0;
+      }
+
+      #posal-chat-toggle-button.is-open .icon-close {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+      }
 
       @media (max-width: 768px) {
         #posal-chat-widget-container {
@@ -168,9 +181,13 @@
     if (state.toggleButton) return;
     state.toggleButton = document.createElement('div');
     state.toggleButton.id = 'posal-chat-toggle-button';
+    // Pre-render both icons
     state.toggleButton.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <svg class="icon-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+      </svg>
+      <svg class="icon-close" viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"></polyline>
       </svg>
     `;
     state.toggleButton.onclick = toggle;
@@ -200,11 +217,6 @@
     }
     state.widgetContainer.classList.add('is-open');
     state.toggleButton.classList.add('is-open');
-    state.toggleButton.innerHTML = `
-       <svg viewBox="0 0 24 24" width="30" height="30" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 18 9 12 15 6"></polyline>
-      </svg>
-    `;
     saveState();
   }
 
@@ -215,11 +227,7 @@
     }
     if (state.toggleButton) {
       state.toggleButton.classList.remove('is-open');
-      state.toggleButton.innerHTML = `
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-        </svg>
-      `;
+      // Removed innerHTML rewriting
     }
     saveState();
   }
