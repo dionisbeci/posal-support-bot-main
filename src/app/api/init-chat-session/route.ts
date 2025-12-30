@@ -141,9 +141,19 @@ export async function POST(req: Request) {
 
       if (!userConvoQuery.empty) {
         const doc = userConvoQuery.docs[0];
-        // Only resume if not ended
-        if (doc.data().status !== 'ended') {
-          existingConvoDoc = doc;
+        const data = doc.data();
+
+        // Only resume if not ended AND shopId matches (if shopId is provided in params)
+        // If shopId changed we treat it as a new session context
+        if (data.status !== 'ended') {
+          const paramsShopId = params.shopId;
+          const storedShopId = data.shopId;
+
+          // If params has a shopId, it must match the stored one. 
+          // If no shopId in params, we allow resuming (backward compatibility or global context).
+          if (!paramsShopId || paramsShopId === storedShopId) {
+            existingConvoDoc = doc;
+          }
         }
       }
     }
